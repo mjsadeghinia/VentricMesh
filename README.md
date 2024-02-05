@@ -1,1 +1,7 @@
 # VentricMesh
+
+VentricMesh creates a smooth triangular mesh from masks of MRI images of heart ventricles. It assumes the ventricles are scanned from the base and stored in a 4th dimensional numpy array where the first dimension is the slice number, the second and third dimensions represent the image at each slice, and the last dimension represents time. The example file show how to create a 3D surface mesh using VenricMesh.
+
+The underlying algorithm of VentricMesh involves creating data points based on epi and endo. These points are then fitted using B-Splines. The B-Spline is used to generate several new seed points for the generation of long-axis B-Splines. The long-axis B-Spline is then used to regenerate a new and final set of short-axis B-Splines, which are now aligned (correcting short-axis misalignment common in most cardiac MRI). After that, based on the user's input, seed points are assigned at the base, and new slices are created in the longitudinal direction. This creates a new point cloud used for meshing.
+
+Regarding meshing, we use Delaunay triangulation in 2D. We examine each neighboring slice and flatten them into a plane, scaling and aligning them so that one fits inside the other. Then, we use Delaunay triangulation to mesh the area between the two slices. Finally, we use the original coordinates and the connection matrix from Delaunay to create the 3D surface mesh. The 3D surface mesh can easily converted into a 3D volume mesh using gmesh, shown in the example file. The final mesh should can be used in numerical simulations.
