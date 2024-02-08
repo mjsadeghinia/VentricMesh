@@ -27,6 +27,7 @@ dependencies = [
     "tqdm",
     "gmsh",
     "numpy",
+    "matplotlib",
     "plotly"
 ]
 
