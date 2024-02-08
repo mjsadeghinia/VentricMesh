@@ -25,7 +25,6 @@ dependencies = [
     "scipy",
     "opencv-python",
     "tqdm",
-    "gmsh",
     "numpy",
     "matplotlib",
     "plotly"
