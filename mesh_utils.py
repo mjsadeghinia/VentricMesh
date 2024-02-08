@@ -7,6 +7,8 @@ from scipy.interpolate import splprep
 from stl import mesh
 from scipy.spatial import Delaunay
 import warnings
+import gmsh
+from tqdm import tqdm  
 
 #----------------------------------------------------------------
 #-------------    Preproscessing of the Masks    ----------------
@@ -63,13 +65,13 @@ def get_endo_epi(mask):
 #% Getting shax bsplines from epi and endo masks
 def get_shax_from_mask(mask,resolution,slice_thickness,smooth_level):
     I=mask.shape[1]
-    T_end=mask[:].shape[3]
+    T_total=mask[:].shape[3]
     K=mask[:].shape[0]
     t_nurbs = [[] for _ in range(mask.shape[3])]
     c_nurbs = [[] for _ in range(mask.shape[3])]
     k_nurbs = [[] for _ in range(mask.shape[3])]
 
-    for t in range(T_end):
+    for t in tqdm(range(T_total), desc="Creating SHAX Curves", ncols=100):
         for k in range(K):
             
             img=mask[k,:,:,t]
@@ -93,7 +95,7 @@ def get_shax_from_mask(mask,resolution,slice_thickness,smooth_level):
 def get_sample_points_from_shax(tck_shax,n_points):
     T_total=len(tck_shax[0])
     sample_points = [[] for _ in range(T_total)]
-    for t in range(T_total):
+    for t in tqdm(range(T_total), desc="Creating LAX Sample points", ncols=100):
         K = len(tck_shax[0][t])
         # We find the center based on the SHAX of the last slice
         shax_points=get_points_from_tck(tck_shax,t,-1)
@@ -123,7 +125,8 @@ def create_lax_points(sample_points,slice_thickness):
     n_curves=int(n_points/2)
     LAX_points = [[] for _ in range(T_total)]
     apex=np.zeros((T_total,3))
-    for t in range(T_total):
+    # for t in range(T_total):
+    for t in tqdm(range(T_total), desc="Creating LAX Curves", ncols=100):
         K = len(sample_points[t])
         # We find the center of the last slice SHAX
         Last_SHAX_points=sample_points[t][-1][:,:2]
@@ -212,7 +215,7 @@ def get_shax_from_lax(tck_lax,apex,num_sections,z_sections_flag=0):
     t_nurbs = [[] for _ in range(T_total)]
     c_nurbs= [[] for _ in range(T_total)]
     k_nurbs = [[] for _ in range(T_total)]
-    for t in range(T_total):
+    for t in tqdm(range(T_total), desc="SHAX Allignment with respect to Generated LAX", ncols=100):
         if z_sections_flag==1:
             z_sections=create_z_sections_for_shax(tck_lax,apex,t,num_sections)
         elif z_sections_flag==0:
@@ -519,7 +522,7 @@ def NodeGenerator(mask,resolution,slice_thickness,seed_num_base_epi,seed_num_bas
     sample_points_epi=get_sample_points_from_shax(tck_epi,n_points_lax)
     sample_points_endo=get_sample_points_from_shax(tck_endo,n_points_lax)
     LAX_points_epi,apex_epi=create_lax_points(sample_points_epi,slice_thickness)
-    LAX_points_endo,apex_endo=create_lax_points(sample_points_endo,slice_thickness)
+    LAX_points_endo,apex_endo=create_lax_points(sample_points_endo,slice_thickness)    
     tck_lax_epi=get_lax_from_laxpoints(LAX_points_epi,smooth_lax_epi)
     tck_lax_endo=get_lax_from_laxpoints(LAX_points_endo,smooth_lax_endo)
     tck_shax_epi=get_shax_from_lax(tck_lax_epi,apex_epi,num_z_sections_epi,z_sections_flag_epi)
@@ -578,6 +581,7 @@ def check_mesh_quality(mesh_filename):
     # Load the STL file
     mesh_data = mesh.Mesh.from_file(mesh_filename)
     print("===============================")
+    print("===============================")
     # Basic Properties
     print("Triangles:", len(mesh_data.vectors))
     # Triangle Quality
@@ -590,3 +594,42 @@ def check_mesh_quality(mesh_filename):
     num_large_aspect_ratio = sum(1 for ratio in aspect_ratios if ratio > 5)
     print("Number of Triangles with Aspect Ratio > 5:", num_large_aspect_ratio)
     print("===============================")
+    print("===============================")
+
+#%%
+def print_mesh_quality_report(n_bins):
+    # Retrieve statistics about the mesh
+    # num_elem=gmsh.model.mesh.getMaxElementTag()
+    elem_tags=gmsh.model.mesh.getElementsByType(4) # getting all the tetrahedron eleemnts
+    num_elem=elem_tags[0].shape[0]
+    q=gmsh.model.mesh.getElementQualities(elem_tags[0])
+    counts, bin_edges = np.histogram(q, bins=n_bins, range=(0, 1))
+    for i in range(n_bins):
+        print(f"{bin_edges[i]:.2f} < quality < {bin_edges[i+1]:.2f} : {counts[i]:>10} elements")
+
+    
+def generate_3d_mesh_from_stl(stl_path, mesh_path):
+    gmsh.initialize()
+    gmsh.option.setNumber("General.Verbosity", 1)
+    gmsh.merge(stl_path)
+    # Meshing options
+    gmsh.option.setNumber("Mesh.Algorithm3D", 1)  # 1: Delaunay, 4: Frontal
+    n = gmsh.model.getDimension()
+    s = gmsh.model.getEntities(n)
+    l = gmsh.model.geo.addSurfaceLoop([s[i][1] for i in range(len(s))])
+    gmsh.model.geo.addVolume([l])
+    gmsh.model.geo.synchronize()    
+    # Generate 3D mesh
+    gmsh.model.mesh.OptimizeNetgen = 1
+    gmsh.model.mesh.SurfaceFaces = 1
+    gmsh.model.mesh.Algorithm    = 1 # (1=MeshAdapt, 2=Automatic, 5=Delaunay, 6=Frontal, 7=bamg, 8=delquad) (Default=2)
+    gmsh.model.mesh.Algorithm3D    = 4 # (1=Delaunay, 4=Frontal, 5=Frontal Delaunay, 6=Frontal Hex, 7=MMG3D, 9=R-tree) (Default=1)
+    gmsh.model.mesh.Recombine3DAll = 0
+    gmsh.model.mesh.generate(3)
+    gmsh.write(mesh_path)
+    print("Quality report of the final volumetri mesh:")
+    print_mesh_quality_report(10)
+    print("===============================")
+    print("===============================")
+    gmsh.finalize()
+    
