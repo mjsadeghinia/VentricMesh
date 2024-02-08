@@ -21,7 +21,7 @@ urls = {Homepage = "https://github.com/mjsadeghinia/VentricMesh"}
 requires-python = ">=3.8"
 dependencies = [
     "h5py",
-    "stl",
+    "numpy-stl",
     "scipy",
     "opencv-python",
     "tqdm",
