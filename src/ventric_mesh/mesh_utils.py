@@ -1,14 +1,16 @@
 
 import numpy as np
-from utils import *
+
 import cv2 as cv
 from scipy.interpolate import splev
 from scipy.interpolate import splprep
 from stl import mesh
 from scipy.spatial import Delaunay
 import warnings
-import gmsh
+# import gmsh
 from tqdm import tqdm  
+
+from .utils import *
 
 #----------------------------------------------------------------
 #-------------    Preproscessing of the Masks    ----------------
@@ -597,39 +599,39 @@ def check_mesh_quality(mesh_filename):
     print("===============================")
 
 #%%
-def print_mesh_quality_report(n_bins):
-    # Retrieve statistics about the mesh
-    # num_elem=gmsh.model.mesh.getMaxElementTag()
-    elem_tags=gmsh.model.mesh.getElementsByType(4) # getting all the tetrahedron eleemnts
-    num_elem=elem_tags[0].shape[0]
-    q=gmsh.model.mesh.getElementQualities(elem_tags[0])
-    counts, bin_edges = np.histogram(q, bins=n_bins, range=(0, 1))
-    for i in range(n_bins):
-        print(f"{bin_edges[i]:.2f} < quality < {bin_edges[i+1]:.2f} : {counts[i]:>10} elements")
+# def print_mesh_quality_report(n_bins):
+#     # Retrieve statistics about the mesh
+#     # num_elem=gmsh.model.mesh.getMaxElementTag()
+#     elem_tags=gmsh.model.mesh.getElementsByType(4) # getting all the tetrahedron eleemnts
+#     num_elem=elem_tags[0].shape[0]
+#     q=gmsh.model.mesh.getElementQualities(elem_tags[0])
+#     counts, bin_edges = np.histogram(q, bins=n_bins, range=(0, 1))
+#     for i in range(n_bins):
+#         print(f"{bin_edges[i]:.2f} < quality < {bin_edges[i+1]:.2f} : {counts[i]:>10} elements")
 
     
-def generate_3d_mesh_from_stl(stl_path, mesh_path):
-    gmsh.initialize()
-    gmsh.option.setNumber("General.Verbosity", 1)
-    gmsh.merge(stl_path)
-    # Meshing options
-    gmsh.option.setNumber("Mesh.Algorithm3D", 1)  # 1: Delaunay, 4: Frontal
-    n = gmsh.model.getDimension()
-    s = gmsh.model.getEntities(n)
-    l = gmsh.model.geo.addSurfaceLoop([s[i][1] for i in range(len(s))])
-    gmsh.model.geo.addVolume([l])
-    gmsh.model.geo.synchronize()    
-    # Generate 3D mesh
-    gmsh.model.mesh.OptimizeNetgen = 1
-    gmsh.model.mesh.SurfaceFaces = 1
-    gmsh.model.mesh.Algorithm    = 1 # (1=MeshAdapt, 2=Automatic, 5=Delaunay, 6=Frontal, 7=bamg, 8=delquad) (Default=2)
-    gmsh.model.mesh.Algorithm3D    = 4 # (1=Delaunay, 4=Frontal, 5=Frontal Delaunay, 6=Frontal Hex, 7=MMG3D, 9=R-tree) (Default=1)
-    gmsh.model.mesh.Recombine3DAll = 0
-    gmsh.model.mesh.generate(3)
-    gmsh.write(mesh_path)
-    print("Quality report of the final volumetri mesh:")
-    print_mesh_quality_report(10)
-    print("===============================")
-    print("===============================")
-    gmsh.finalize()
+# def generate_3d_mesh_from_stl(stl_path, mesh_path):
+#     gmsh.initialize()
+#     gmsh.option.setNumber("General.Verbosity", 1)
+#     gmsh.merge(stl_path)
+#     # Meshing options
+#     gmsh.option.setNumber("Mesh.Algorithm3D", 1)  # 1: Delaunay, 4: Frontal
+#     n = gmsh.model.getDimension()
+#     s = gmsh.model.getEntities(n)
+#     l = gmsh.model.geo.addSurfaceLoop([s[i][1] for i in range(len(s))])
+#     gmsh.model.geo.addVolume([l])
+#     gmsh.model.geo.synchronize()    
+#     # Generate 3D mesh
+#     gmsh.model.mesh.OptimizeNetgen = 1
+#     gmsh.model.mesh.SurfaceFaces = 1
+#     gmsh.model.mesh.Algorithm    = 1 # (1=MeshAdapt, 2=Automatic, 5=Delaunay, 6=Frontal, 7=bamg, 8=delquad) (Default=2)
+#     gmsh.model.mesh.Algorithm3D    = 4 # (1=Delaunay, 4=Frontal, 5=Frontal Delaunay, 6=Frontal Hex, 7=MMG3D, 9=R-tree) (Default=1)
+#     gmsh.model.mesh.Recombine3DAll = 0
+#     gmsh.model.mesh.generate(3)
+#     gmsh.write(mesh_path)
+#     print("Quality report of the final volumetri mesh:")
+#     print_mesh_quality_report(10)
+#     print("===============================")
+#     print("===============================")
+#     gmsh.finalize()
     
