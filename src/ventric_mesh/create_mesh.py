@@ -1,9 +1,11 @@
 #%%
-from mesh_utils import *
-from utils import *
+
 import h5py
 from pathlib import Path
 import argparse
+
+from .mesh_utils import *
+from .utils import *
 
 here = Path(__file__).absolute().parent
 

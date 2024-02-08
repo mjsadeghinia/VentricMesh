@@ -1,6 +1,6 @@
 
 import numpy as np
-from utils import *
+
 import cv2 as cv
 from scipy.interpolate import splev
 from scipy.interpolate import splprep
@@ -9,6 +9,8 @@ from scipy.spatial import Delaunay
 import warnings
 import gmsh
 from tqdm import tqdm  
+
+from .utils import *
 
 #----------------------------------------------------------------
 #-------------    Preproscessing of the Masks    ----------------

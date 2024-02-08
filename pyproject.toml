@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ventric_mesh"
+version = "0.0.1"
+description = "Some description"
+authors = [{name = "Javad Sadeghinia", email = "javad@simula.no"}]
+license = {text = "MIT"}
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+keywords = ["mesh"]
+urls = {Homepage = "https://github.com/mjsadeghinia/VentricMesh"}
+requires-python = ">=3.8"
+dependencies = [
+    "h5py",
+    "stl",
+    "scipy",
+    "opencv-python",
+    "tqdm",
+    "gmsh",
+    "numpy",
+    "plotly"
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+
+[project.scripts]
+ventric-mesh = "ventric_mesh.create_mesh:main"
+
