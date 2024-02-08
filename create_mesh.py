@@ -7,15 +7,6 @@ import argparse
 
 here = Path(__file__).absolute().parent
 
-# sample_ID='D3-2_sample.h5'
-# num_z_sections_endo=20
-# num_z_sections_epi=20
-# seed_num_base_endo=12
-# seed_num_base_epi=20
-# num_mid_layers_base=2
-# t_mesh=-1
-# filename_suffix='ED'
-
 #%%
 def read_data_h5(file_dir):
     with h5py.File(file_dir, "r") as f:
@@ -80,6 +71,7 @@ def main() -> int:
         help="The normalized time of the cardiac cylce for the mesh, 0 is early systole and 1 is end diastole. ",
     )
     args = parser.parse_args()
+    
     file_dir= here / args.filename
     num_z_sections_endo=args.num_z_sections_endo
     num_z_sections_epi=args.num_z_sections_epi
