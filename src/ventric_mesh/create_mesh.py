@@ -1,13 +1,14 @@
 #%%
 
 import h5py
-from pathlib import Path
+import os
+# from pathlib import Path
 import argparse
 
 from .mesh_utils import *
 from .utils import *
 
-here = Path(__file__).absolute().parent
+# here = Path(__file__).absolute().parent
 
 #%%
 def read_data_h5(file_dir):
@@ -72,25 +73,32 @@ def main() -> int:
         type=float,
         help="The normalized time of the cardiac cylce for the mesh, 0 is early systole and 1 is end diastole. ",
     )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        default=os.getcwd(),
+        type=str,
+        help="The output directory to save the files. ",
+    )
     args = parser.parse_args()
     
-    file_dir= here / args.filename
+    file_dir= os.getcwd()+'/'+args.filename
     num_z_sections_endo=args.num_z_sections_endo
     num_z_sections_epi=args.num_z_sections_epi
     seed_num_base_endo=args.seed_num_base_endo
     seed_num_base_epi=args.seed_num_base_epi
     num_mid_layers_base=args.num_mid_layers_base
     filename_suffix=args.suffix
+    output_dir=args.output_dir+'/'
     
     
     LVmask,T,slice_thickness,resolution=read_data_h5(file_dir)
     T_end=len(T)
     t_mesh=int((args.time)*T_end)-1
     
-    
     points_cloud_epi,points_cloud_endo=NodeGenerator(LVmask,resolution,slice_thickness,seed_num_base_epi,seed_num_base_endo,num_z_sections_epi,num_z_sections_endo)
     LVmesh=VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base,filename_suffix,result_folder='')
-    generate_3d_mesh_from_stl('Mesh_'+filename_suffix+'.stl', 'Mesh_'+filename_suffix+'_3D.msh')
+    generate_3d_mesh_from_stl(output_dir+'Mesh_'+filename_suffix+'.stl', output_dir+'Mesh_'+filename_suffix+'_3D.msh')
     
 #%%   
 if __name__ == "__main__":

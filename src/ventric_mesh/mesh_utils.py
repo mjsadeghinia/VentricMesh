@@ -1,12 +1,10 @@
 
 import numpy as np
-
-# import cv2 as cv
+from scipy.spatial import Delaunay
 from scipy.interpolate import splev
 from scipy.interpolate import splprep
-from stl import mesh
-from scipy.spatial import Delaunay
 from scipy.ndimage import binary_dilation
+from stl import mesh
 import warnings
 import gmsh
 from tqdm import tqdm  
@@ -28,13 +26,8 @@ def get_endo_epi(mask):
         for k in range(K):
             mask_t=mask[k, :, :, t]
             img = np.uint8(mask_t * 255)
-            # breakpoint()
             img_dilated = binary_dilation(img, structure=kernel).astype(img.dtype)
             img_edges = img_dilated - img
-            # img_dilated = cv.dilate(img, kernel, iterations = 1)
-            # img_eroded = cv.erode(img, kernel, iterations = 1)
-            # img_edges=cv.subtract(img_dilated,img)
-            # img_array_edges=np.uint8(img_edges * 255)
             flag, visited, visited_reversed=is_connected(img_edges)
             if flag:
                 img_epi=img_edges
@@ -52,14 +45,8 @@ def get_endo_epi(mask):
                         img_epi[x,y] = 1
                     for x,y in visited:
                         img_endo[x,y]=1
-            # if export_flag:
-            #     overlay=image_overlay(img,img_endo,img_epi)
-            #     cv.imwrite(output_folder+'02_Edges/'+str(t+1)+'_'+str(k+1)+'.png', overlay)
-                
             mask_epi[k,:,:,t]=img_epi
-            mask_endo[k,:,:,t]=img_endo
-            
-            
+            mask_endo[k,:,:,t]=img_endo       
     return mask_epi,mask_endo
    
    
@@ -79,7 +66,6 @@ def get_shax_from_mask(mask,resolution,slice_thickness,smooth_level):
 
     for t in tqdm(range(T_total), desc="Creating SHAX Curves", ncols=100):
         for k in range(K):
-            
             img=mask[k,:,:,t]
             coords=coords_from_img(img,resolution,I)
             # the if conditions is for the endo as there are not alway K 
@@ -203,7 +189,6 @@ def get_shax_area_from_lax(tck_lax,t,apex,num_sections):
         shax_points=get_shax_points_from_lax(tck_lax,t,z_list[k])
         tck_tk, u_epi = splprep([shax_points[:,0],shax_points[:,1],shax_points[:,2]], s=0, per=True, k=3) 
         area_shax[k]=calculate_area_b_spline(tck_tk)
-        # radii_shax[k]=np.sqrt(area_shax[k]/np.pi)     
     return area_shax 
 
 
@@ -278,7 +263,6 @@ def create_apex_points_cloud(points,tck_shax_apex,k_apex,K,apex_coords,seed_num_
         warnings.warn(f"The apex positision is chaneged {dist_apex_center_shax} mm, which is above the threshold of 1 mm.", UserWarning)
     for i in range(num_sections):
         if i==0:
-            # points=np.vstack((points,points_equal_spaced))
             points.append(points_equal_spaced)
         else:
             new_shax_points=points_equal_spaced - (points_equal_spaced - center_shax) * scale / np.linalg.norm(points_equal_spaced - center_shax, axis=1)[:, np.newaxis]
