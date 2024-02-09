@@ -27,7 +27,8 @@ dependencies = [
     "tqdm",
     "numpy",
     "matplotlib",
-    "plotly"
+    "plotly",
+    "gmsh"
 ]
 
 [project.readme]
