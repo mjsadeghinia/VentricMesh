@@ -1,11 +1,12 @@
 
 import numpy as np
 
-import cv2 as cv
+# import cv2 as cv
 from scipy.interpolate import splev
 from scipy.interpolate import splprep
 from stl import mesh
 from scipy.spatial import Delaunay
+from scipy.ndimage import binary_dilation
 import warnings
 import gmsh
 from tqdm import tqdm  
@@ -27,9 +28,12 @@ def get_endo_epi(mask):
         for k in range(K):
             mask_t=mask[k, :, :, t]
             img = np.uint8(mask_t * 255)
-            img_dilated = cv.dilate(img, kernel, iterations = 1)
+            # breakpoint()
+            img_dilated = binary_dilation(img, structure=kernel).astype(img.dtype)
+            img_edges = img_dilated - img
+            # img_dilated = cv.dilate(img, kernel, iterations = 1)
             # img_eroded = cv.erode(img, kernel, iterations = 1)
-            img_edges=cv.subtract(img_dilated,img)
+            # img_edges=cv.subtract(img_dilated,img)
             # img_array_edges=np.uint8(img_edges * 255)
             flag, visited, visited_reversed=is_connected(img_edges)
             if flag:

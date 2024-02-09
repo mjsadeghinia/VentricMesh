@@ -23,7 +23,6 @@ dependencies = [
     "h5py",
     "numpy-stl",
     "scipy",
-    "opencv-python",
     "tqdm",
     "numpy",
     "matplotlib",
