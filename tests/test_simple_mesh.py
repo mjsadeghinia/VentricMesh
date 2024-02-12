@@ -61,30 +61,9 @@ num_mid_layers_base=1
 t_mesh=0
 
 points_cloud_epi,points_cloud_endo=mu.NodeGenerator(mask,resolution,slice_thickness,seed_num_base_epi,seed_num_base_endo,num_z_sections_epi,num_z_sections_endo)
-mesh=mu.VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base,'test',result_folder='')
-# %%
-# Triangle Quality
-def triangle_aspect_ratio(vertices):
-    """
-    Calculate the aspect ratio of a triangle.
-    Aspect Ratio: The maximum ratio of the length of a side to the perpendicular distance 
-    from that side to its opposite node, multiplied by √3/2. √3/2 is a factor based on 
-    an equilateral triangle.
-    """
-    # Calculate the lengths of the sides of the triangle
-    lengths = np.sqrt(np.sum(np.square(np.diff(vertices[np.array([0, 1, 2, 0])], axis=0)), axis=1))
-    # Calculate the semi-perimeter
-    s = np.sum(lengths) / 2
-    # Calculate the area using Heron's formula
-    area = np.sqrt(s * np.prod(s - lengths))
-    # The shortest altitude is area * 2 / longest side
-    shortest_altitude = (area * 2) / np.max(lengths)
-    # Aspect ratio is longest side length over shortest altitude
-    return np.max(lengths) / shortest_altitude * np.sqrt(3) / 2
-
-aspect_ratios = [triangle_aspect_ratio(triangle) for triangle in mesh.vectors]
-average_aspect_ratio = np.mean(aspect_ratios)
-std_aspect_ratio = np.std(aspect_ratios)
+mesh=mu.VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base,save_flag=False,filename_suffix='test',result_folder='')
+aspect_ratios=mu.check_mesh_quality(mesh)
 num_large_aspect_ratio = sum(1 for ratio in aspect_ratios if ratio > 5)
+# %%
 # check if more than 5% of the elements have very high aspect ratios 
 assert num_large_aspect_ratio<len(aspect_ratios)*0.05

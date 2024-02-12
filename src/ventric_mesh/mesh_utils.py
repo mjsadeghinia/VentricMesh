@@ -524,24 +524,24 @@ def NodeGenerator(mask,resolution,slice_thickness,seed_num_base_epi,seed_num_bas
     return points_cloud_epi,points_cloud_endo
 
 
-def VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base,filename_suffix,result_folder=''):
+def VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base,save_flag=True,filename_suffix='',result_folder=''):
     vertices_epi,faces_epi=create_mesh_slice_by_slice(points_cloud_epi[t_mesh])
-    mesh_epi=create_mesh(vertices_epi,faces_epi)
-    mesh_epi_filename=result_folder+'Mesh_epi_'+filename_suffix+'.stl'
-    # mesh_epi.save(mesh_epi_filename)
     vertices_endo,faces_endo=create_mesh_slice_by_slice(points_cloud_endo[t_mesh])
-    mesh_endo=create_mesh(vertices_endo,faces_endo)
-    mesh_endo_filename=result_folder+'Mesh_endo_'+filename_suffix+'.stl'
-    # mesh_endo.save(mesh_endo_filename)
     points_cloud_base=create_base_point_cloud(points_cloud_endo,points_cloud_epi,num_mid_layers_base)
     vertices_base,faces_base=create_base_mesh(points_cloud_base[t_mesh])
-    mesh_base=create_mesh(vertices_base,faces_base)
-    mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
-    # mesh_base.save(mesh_base_filename)
     mesh_merged=merge_meshes(vertices_epi,faces_epi,vertices_base,faces_base,vertices_endo,faces_endo)
     mesh_merged_filename=result_folder+'Mesh_'+filename_suffix+'.stl'
-    mesh_merged.save(mesh_merged_filename)
-    check_mesh_quality(mesh_merged_filename)
+    if save_flag:
+        mesh_merged.save(mesh_merged_filename)
+    # mesh_epi=create_mesh(vertices_epi,faces_epi)
+    # mesh_epi_filename=result_folder+'Mesh_epi_'+filename_suffix+'.stl'
+    # mesh_epi.save(mesh_epi_filename)   
+    # mesh_endo=create_mesh(vertices_endo,faces_endo)
+    # mesh_endo_filename=result_folder+'Mesh_endo_'+filename_suffix+'.stl'
+    # mesh_endo.save(mesh_endo_filename)
+    # mesh_base=create_mesh(vertices_base,faces_base)
+    # mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
+    # mesh_base.save(mesh_base_filename)
     return mesh_merged
 
 #----------------------------------------------------------------
@@ -566,12 +566,10 @@ def triangle_aspect_ratio(vertices):
     # Aspect ratio is longest side length over shortest altitude
     return np.max(lengths) / shortest_altitude * np.sqrt(3) / 2
 
-def check_mesh_quality(mesh_filename):
+def check_mesh_quality(mesh_data):
     """
-    Load an STL file and print out its quality metrics.
+    Get a mesh file and print out its quality metrics.
     """
-    # Load the STL file
-    mesh_data = mesh.Mesh.from_file(mesh_filename)
     print("===============================")
     print("===============================")
     # Basic Properties
@@ -587,6 +585,7 @@ def check_mesh_quality(mesh_filename):
     print("Number of Triangles with Aspect Ratio > 5:", num_large_aspect_ratio)
     print("===============================")
     print("===============================")
+    return aspect_ratios
 
 #%%
 def print_mesh_quality_report(n_bins):
