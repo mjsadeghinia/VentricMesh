@@ -1,4 +1,4 @@
-
+#%%
 import numpy as np
 from scipy.spatial import Delaunay
 from scipy.interpolate import splev
@@ -10,7 +10,7 @@ import gmsh
 from tqdm import tqdm  
 
 from .utils import *
-
+#%%
 #----------------------------------------------------------------
 #-------------    Preproscessing of the Masks    ----------------
 #---------------------------------------------------------------- 
@@ -28,6 +28,7 @@ def get_endo_epi(mask):
             img = np.uint8(mask_t * 255)
             img_dilated = binary_dilation(img, structure=kernel).astype(img.dtype)
             img_edges = img_dilated - img
+            img_edges[img_edges == 2] = 0
             flag, visited, visited_reversed=is_connected(img_edges)
             if flag:
                 img_epi=img_edges
@@ -502,6 +503,7 @@ def merge_meshes(vertices_epi,faces_epi,vertices_base,faces_base,vertices_endo,f
     mesh_merged=create_mesh(merged_vertices,merged_faces)
     return mesh_merged
     
+#%%
 #----------------------------------------------------------------
 #-------------- Main functions to create meshes  ----------------
 #---------------------------------------------------------------- 
