@@ -1,9 +1,6 @@
 #%%
 from ventric_mesh import mesh_utils as mu
 
-# lets define a function to create a boolean mask of size 10*100*100*5 named mask. 
-# for mask[0,:,:,0] it should be a ring of with outer diameter of 95 and inner diameter of 85. 
-
 import numpy as np
 import matplotlib.pyplot as plt
 
