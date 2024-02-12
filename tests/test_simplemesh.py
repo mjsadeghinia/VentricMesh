@@ -38,29 +38,30 @@ def create_ring(inner_diameter, outer_diameter, image_size, shift_x, shift_y):
     return mask
 
 #%% Example parameters
-image_size = 100
-num_slices = 5
-ring_thickness = 20
-start_reduction = 20
-max_shift = 5  # Maximum shift in pixels for the ring center
+def test_meshing():
+    image_size = 100
+    num_slices = 5
+    ring_thickness = 20
+    start_reduction = 20
+    max_shift = 5  # Maximum shift in pixels for the ring center
 
-mask1 = create_lv(image_size, num_slices, ring_thickness, start_reduction, max_shift)
-mask2 = create_lv(image_size, num_slices, ring_thickness+5, start_reduction+10, max_shift)
-mask=np.stack((mask1,mask2), axis=-1)
-#
-resolution=0.1
-slice_thickness=1
-seed_num_base_epi=10
-seed_num_base_endo=8
-num_z_sections_epi=10
-num_z_sections_endo=6
-num_mid_layers_base=1
-t_mesh=0
+    mask1 = create_lv(image_size, num_slices, ring_thickness, start_reduction, max_shift)
+    mask2 = create_lv(image_size, num_slices, ring_thickness+5, start_reduction+10, max_shift)
+    mask=np.stack((mask1,mask2), axis=-1)
+    #
+    resolution=0.1
+    slice_thickness=1
+    seed_num_base_epi=10
+    seed_num_base_endo=8
+    num_z_sections_epi=10
+    num_z_sections_endo=6
+    num_mid_layers_base=1
+    t_mesh=0
 
-points_cloud_epi,points_cloud_endo=mu.NodeGenerator(mask,resolution,slice_thickness,seed_num_base_epi,seed_num_base_endo,num_z_sections_epi,num_z_sections_endo)
-mesh=mu.VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base,save_flag=False,filename_suffix='test',result_folder='')
-aspect_ratios=mu.check_mesh_quality(mesh)
-num_large_aspect_ratio = sum(1 for ratio in aspect_ratios if ratio > 5)
-# %%
-# check if more than 5% of the elements have very high aspect ratios 
-assert num_large_aspect_ratio<len(aspect_ratios)*0.05
+    points_cloud_epi,points_cloud_endo=mu.NodeGenerator(mask,resolution,slice_thickness,seed_num_base_epi,seed_num_base_endo,num_z_sections_epi,num_z_sections_endo)
+    mesh=mu.VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base,save_flag=False,filename_suffix='test',result_folder='')
+    aspect_ratios=mu.check_mesh_quality(mesh)
+    num_large_aspect_ratio = sum(1 for ratio in aspect_ratios if ratio > 5)
+    # %%
+    # check if more than 5% of the elements have very high aspect ratios 
+    assert num_large_aspect_ratio<len(aspect_ratios)*0.05
