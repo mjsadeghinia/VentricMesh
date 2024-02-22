@@ -17,16 +17,14 @@ from .utils import *
 # Extracting of edges of epi and endo 
 # Here we create the edges of each stack if the edges are connected so we are on the last stacks where the there is only epicardium otherwise we have both epi and endo. In this case the samples with more element (lenght) is the outer diameter and thus epicardium
 def get_endo_epi(mask):
-    kernel = np.ones((3, 3), np.uint8)
-    if len(mask.shape) == 4:
-        K, I, _, T_end = mask.shape 
-    elif len(mask.shape) == 3:
-        K, I, _ = mask.shape
-        T_end = 1  
-    mask_epi=np.zeros((K,I,I,T_end))
-    mask_endo=np.zeros((K,I,I,T_end))
+    if len(mask.shape)==3:
+        mask=np.expand_dims(mask, axis=-1)
+    K, I, _, T_total = mask.shape
+    kernel = np.ones((3, 3), np.uint8) 
+    mask_epi=np.zeros((K,I,I,T_total))
+    mask_endo=np.zeros((K,I,I,T_total))
 
-    for t in range(T_end):
+    for t in range(T_total):
         for k in range(K):
             mask_t=mask[k, :, :, t]
             img = np.uint8(mask_t * 255)
@@ -62,9 +60,9 @@ def get_endo_epi(mask):
      
 #% Getting shax bsplines from epi and endo masks
 def get_shax_from_mask(mask,resolution,slice_thickness,smooth_level):
-    I=mask.shape[1]
-    T_total=mask[:].shape[3]
-    K=mask[:].shape[0]
+    if len(mask.shape)==3:
+        mask=np.expand_dims(mask, axis=-1)
+    K, I, _, T_total = mask.shape
     t_nurbs = [[] for _ in range(mask.shape[3])]
     c_nurbs = [[] for _ in range(mask.shape[3])]
     k_nurbs = [[] for _ in range(mask.shape[3])]
