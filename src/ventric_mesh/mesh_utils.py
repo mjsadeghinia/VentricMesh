@@ -18,7 +18,11 @@ from .utils import *
 # Here we create the edges of each stack if the edges are connected so we are on the last stacks where the there is only epicardium otherwise we have both epi and endo. In this case the samples with more element (lenght) is the outer diameter and thus epicardium
 def get_endo_epi(mask):
     kernel = np.ones((3, 3), np.uint8)
-    K,I,I,T_end=mask.shape
+    if len(mask.shape) == 4:
+        K, I, _, T_end = mask.shape 
+    elif len(mask.shape) == 3:
+        K, I, _ = mask.shape
+        T_end = 1  
     mask_epi=np.zeros((K,I,I,T_end))
     mask_endo=np.zeros((K,I,I,T_end))
 
