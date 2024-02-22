@@ -13,20 +13,6 @@ import math
 import plotly.graph_objects as go
 from scipy.interpolate import BSpline
 
-#----------------------------------------------------------------
-#------------------------    Path    ----------------------------
-#---------------------------------------------------------------- 
-def get_path():
-    """Get the full path of the current notebook or script."""
-    try:
-        # This will work for Jupyter notebooks
-        notebook_path = IPython.core.getipython().getoutput('pwd')[0]
-        return notebook_path
-    except:
-        # This will work for Python scripts
-        script_path = os.path.abspath(__file__)
-        script_folder=os.path.dirname(script_path)
-        return script_folder
     
     
 #----------------------------------------------------------------
