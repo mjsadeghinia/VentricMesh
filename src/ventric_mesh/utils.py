@@ -264,7 +264,7 @@ def plot_shax_with_coords(ax,mask,tck,t,k,resolution,color='r'):
     coords=coords_from_img(mask[k,:,:,t],resolution,I)
     points=get_points_from_tck(tck,t,k)
     ax.plot(points[0], points[1], color+'-')
-    ax.plot(coords[:,0], coords[:,1],color+'o',markersize=1)
+    ax.scatter(coords[:,0], coords[:,1],s=1,c=color)
     plt.gca().set_aspect('equal', adjustable='box')
     return ax
 

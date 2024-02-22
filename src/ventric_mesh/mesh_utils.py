@@ -100,16 +100,25 @@ def get_sample_points_from_shax(tck_shax,n_points):
             sample_points[t].append(points)
     return sample_points
 
-def get_apex_coords(points,K,slice_thickness):
+def get_apex_threshold(points_epi,points_endo):
+    T_total=len(points_endo)
+    threshold=np.zeros(T_total)
+    for t in range(T_total):
+        K_endo=len(points_endo[t])-1
+        a_epi=calculate_area_points(points_epi[t][K_endo])
+        threshold[t]=a_epi*0.05
+    return threshold
+
+def get_apex_coords(points,K,threshold,slice_thickness):
     apex_xy = np.mean(points, axis=0)
     area=calculate_area_points(points)
-    if area<1:
+    if area<threshold:
         apex_z=-((K-1)*slice_thickness+area/2*slice_thickness)
     else:
         apex_z=-((K-1)*slice_thickness+1/2*slice_thickness)
     return np.hstack((apex_xy,apex_z))
 
-def create_lax_points(sample_points,slice_thickness):
+def create_lax_points(sample_points,apex_threshold,slice_thickness):
     """
     The samples points need to be sorted to create LAX points. For n_points in samples we have n_curves=n_points/2.
     This means that for each time step we have n_curves each has 2*K+1 which K is the number of SHAX slices and the 1 corresponds to apex.
@@ -125,7 +134,7 @@ def create_lax_points(sample_points,slice_thickness):
         K = len(sample_points[t])
         # We find the center of the last slice SHAX
         Last_SHAX_points=sample_points[t][-1][:,:2]
-        apex[t,:]=get_apex_coords(Last_SHAX_points,K,slice_thickness)
+        apex[t,:]=get_apex_coords(Last_SHAX_points,K,apex_threshold[t],slice_thickness)
         # We find the points for each curves of LAX
         for m in range(n_curves):
             points_1=[]
@@ -515,8 +524,9 @@ def NodeGenerator(mask,resolution,slice_thickness,seed_num_base_epi,seed_num_bas
     tck_endo=get_shax_from_mask(mask_endo,resolution,slice_thickness,smooth_shax_endo)
     sample_points_epi=get_sample_points_from_shax(tck_epi,n_points_lax)
     sample_points_endo=get_sample_points_from_shax(tck_endo,n_points_lax)
-    LAX_points_epi,apex_epi=create_lax_points(sample_points_epi,slice_thickness)
-    LAX_points_endo,apex_endo=create_lax_points(sample_points_endo,slice_thickness)    
+    apex_threshold=get_apex_threshold(sample_points_epi,sample_points_endo)
+    LAX_points_epi,apex_epi=create_lax_points(sample_points_epi,apex_threshold,slice_thickness)
+    LAX_points_endo,apex_endo=create_lax_points(sample_points_endo,apex_threshold,slice_thickness)    
     tck_lax_epi=get_lax_from_laxpoints(LAX_points_epi,smooth_lax_epi)
     tck_lax_endo=get_lax_from_laxpoints(LAX_points_endo,smooth_lax_endo)
     tck_shax_epi=get_shax_from_lax(tck_lax_epi,apex_epi,num_z_sections_epi,z_sections_flag_epi)
