@@ -484,34 +484,3 @@ def plot_3d_points_on_figure(data_array, fig=None):
         )
 
     return fig
-
-
-def plot_shax_with_coords(mask_epi,tck_epi,mask_endo,tck_endo,resolution,output_folder):
-    I=mask_epi.shape[1]
-    T_end=mask_epi[:].shape[3]
-    coords=coords_from_img(mask_epi[0,:,:,-1],resolution,I)
-    xmin=np.min(coords[:,0])
-    ymin=np.min(coords[:,1])
-    xmax=np.max(coords[:,0])
-    ymax=np.max(coords[:,1])
-    for t in range(T_end):
-        for k in range(K):
-            
-            fig = plt.figure()
-            ax = fig.add_subplot()
-            coords=coords_from_img(mask_epi[k,:,:,t],resolution,I)
-            points=get_points_from_tck(tck_epi,t,k)
-            ax.plot(points[0], points[1], 'r-')
-            ax.plot(coords[:,0], coords[:,1],'ro',markersize=1)
-            
-            coords=coords_from_img(mask_endo[k,:,:,t],resolution,I)
-            if len(coords)>0:
-                points=get_points_from_tck(tck_endo,t,k)
-                ax.plot(points[0], points[1], 'b-')
-                ax.plot(coords[:,0], coords[:,1],'bo',markersize=1)
-                
-            plt.xlim((xmin*.8,xmax*1.1))
-            plt.ylim((ymin*.8,ymax*1.1))
-            plt.gca().set_aspect('equal', adjustable='box')
-            plt.savefig(output_folder+'03_NURBS/'+str(t+1)+'_'+str(k+1)+'.png')
-            plt.close()
