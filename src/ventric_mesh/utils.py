@@ -273,6 +273,15 @@ def plot_spline(ax,tck):
     ax.plot(points[0], points[1], 'r-')
     return ax
 
+def plot_shax_with_coords(ax,mask,tck,t,k,resolution):
+    K, I, _, T_total = mask.shape
+    coords=coords_from_img(mask[k,:,:,t],resolution,I)
+    points=get_points_from_tck(tck,t,k)
+    ax.plot(points[0], points[1], 'r-')
+    ax.plot(coords[:,0], coords[:,1],'ro',markersize=1)
+    plt.gca().set_aspect('equal', adjustable='box')
+
+
 def plot_3d_SHAX(t, slice_thickness, tck_epi, tck_endo=None):
     """
     Plots the 3D SHAX spline shapes for a given t, where each k corresponds to a z location.
