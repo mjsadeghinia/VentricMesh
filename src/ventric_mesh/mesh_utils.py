@@ -113,7 +113,7 @@ def get_apex_coords(points,K,threshold,slice_thickness):
     apex_xy = np.mean(points, axis=0)
     area=calculate_area_points(points)
     if area<threshold:
-        apex_z=-((K-1)*slice_thickness+area/2*slice_thickness)
+        apex_z=-((K-1)*slice_thickness+area/2/threshold*slice_thickness)
     else:
         apex_z=-((K-1)*slice_thickness+1/2*slice_thickness)
     return np.hstack((apex_xy,apex_z))
