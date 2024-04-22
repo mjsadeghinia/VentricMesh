@@ -542,7 +542,10 @@ def VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base,sa
     points_cloud_base=create_base_point_cloud(points_cloud_endo,points_cloud_epi,num_mid_layers_base)
     vertices_base,faces_base=create_base_mesh(points_cloud_base[t_mesh])
     mesh_merged=merge_meshes(vertices_epi,faces_epi,vertices_base,faces_base,vertices_endo,faces_endo)
-    mesh_merged_filename=result_folder+'Mesh_'+filename_suffix+'.stl'
+    if filename_suffix=='':
+        mesh_merged_filename=result_folder+'Mesh.stl'
+    else:
+        mesh_merged_filename=result_folder+'Mesh_'+filename_suffix+'.stl'
     if save_flag:
         mesh_merged.save(mesh_merged_filename)
     # mesh_epi=create_mesh(vertices_epi,faces_epi)
