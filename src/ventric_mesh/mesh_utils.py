@@ -70,7 +70,7 @@ def get_shax_from_mask(mask,resolution,slice_thickness,smooth_level):
     for t in tqdm(range(T_total), desc="Creating SHAX Curves", ncols=100):
         for k in range(K):
             img=mask[k,:,:,t]
-            coords=coords_from_img(img,resolution,I)
+            coords=coords_from_img(img,resolution)
             # the if conditions is for the endo as there are not alway K 
             if len(coords)>0:
                 coords_sorted=sorting_coords(coords)

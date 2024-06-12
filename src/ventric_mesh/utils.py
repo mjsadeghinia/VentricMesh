@@ -75,7 +75,8 @@ def is_connected(matrix):
     
 
 #Getting a coordinates of a binary image with correct value So when ploting it would be similiar to the image itself
-def coords_from_img(img,resolution,I):
+def coords_from_img(img,resolution):
+    I = img.shape[0]
     temp=np.argwhere(img == 1)*resolution 
     coords=np.zeros((len(temp),2))
     coords[:,0]=temp[:,1]
@@ -261,7 +262,7 @@ def plot_spline(ax,tck):
 
 def plot_shax_with_coords(ax,mask,tck,t,k,resolution,color='r'):
     K, I, _, T_total = mask.shape
-    coords=coords_from_img(mask[k,:,:,t],resolution,I)
+    coords=coords_from_img(mask[k,:,:,t],resolution)
     points=get_points_from_tck(tck,t,k)
     ax.plot(points[0], points[1], color+'-')
     ax.scatter(coords[:,0], coords[:,1],s=1,c=color)
