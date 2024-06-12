@@ -260,11 +260,11 @@ def plot_spline(ax,tck):
     ax.plot(points[0], points[1], 'r-')
     return ax
 
-def plot_shax_with_coords(ax,mask,tck,t,k,resolution,color='r'):
-    K, I, _, T_total = mask.shape
-    coords=coords_from_img(mask[k,:,:,t],resolution)
-    points=get_points_from_tck(tck,t,k)
-    ax.plot(points[0], points[1], color+'-')
+def plot_shax_with_coords(mask,tck_points,resolution,ax=None,color='r'):
+    if ax is None:
+        fig, ax = plt.subplots()
+    coords=coords_from_img(mask,resolution)
+    ax.plot(tck_points[0], tck_points[1], color+'-')
     ax.scatter(coords[:,0], coords[:,1],s=1,c=color)
     plt.gca().set_aspect('equal', adjustable='box')
     return ax
