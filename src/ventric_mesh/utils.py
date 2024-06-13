@@ -86,13 +86,13 @@ def coords_from_img(img,resolution):
 
 
 # function to sort the coords based on the closest neighbouring point. This makes it possible to fit using nurbs
-def sorting_coords(coords):
+def sorting_coords(coords, resolution):
     points = [list(coord) for coord in coords]
     coords_sorted = [points[0]]
     used_indices = {0}
     for _ in range(1, len(points)):
         current_point = coords_sorted[-1]
-        closest_point_index = find_closest_point(current_point, points, used_indices)
+        closest_point_index = find_closest_point(current_point, points, used_indices, resolution)
         if closest_point_index >= 0:
             coords_sorted.append(points[closest_point_index])
             used_indices.add(closest_point_index)
@@ -100,13 +100,14 @@ def sorting_coords(coords):
 
 # functions for sorting the points based on the nearest neighbor and fitting the splines
 
-def find_closest_point(current_point, points, used_indices):
+def find_closest_point(current_point, points, used_indices, resolution):
     min_distance = float('inf')
+    max_distance = resolution * 2 * np.sqrt(2)
     closest_point_index = -1
     for i, point in enumerate(points):
         if i not in used_indices:
             distance = np.linalg.norm(np.array(current_point) - np.array(point))
-            if distance < min_distance:
+            if distance < min_distance and distance < max_distance:
                 min_distance = distance
                 closest_point_index = i
     return closest_point_index

@@ -60,6 +60,7 @@ def get_endo_epi(mask):
      
 #% Getting shax bsplines from epi and endo masks
 def get_shax_from_mask(mask,resolution,slice_thickness,smooth_level):
+    warnings.filterwarnings("ignore", category=RuntimeWarning, module="scipy.interpolate")
     if len(mask.shape)==3:
         mask=np.expand_dims(mask, axis=-1)
     K, I, _, T_total = mask.shape
@@ -73,10 +74,10 @@ def get_shax_from_mask(mask,resolution,slice_thickness,smooth_level):
             coords=coords_from_img(img,resolution)
             # the if conditions is for the endo as there are not alway K 
             if len(coords)>0:
-                coords_sorted=sorting_coords(coords)
+                coords_sorted=sorting_coords(coords,resolution)
                 # spline fitting
                 z=-(k)*slice_thickness
-                z_list=np.ones(coords.shape[0])*z
+                z_list=np.ones(coords_sorted.shape[0])*z
                 tck_tk, u_epi = splprep([coords_sorted[:,0],coords_sorted[:,1],z_list], s=smooth_level, per=True, k=3) 
                 # spline evaluations
                 t_nurbs[t].append(tck_tk[0])  # Knot vector
@@ -96,6 +97,7 @@ def get_sample_points_from_shax(tck_shax,n_points):
         shax_points=get_points_from_tck(tck_shax,t,-1)
         LV_center = np.mean(shax_points[:2], axis=1)
         for k in range(K):
+            print('t is ',t,' and k is ',k)
             points=get_n_points_from_shax(n_points,tck_shax,t,k,LV_center)
             sample_points[t].append(points)
     return sample_points
