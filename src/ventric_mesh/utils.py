@@ -260,16 +260,17 @@ def plot_spline(ax,tck):
     ax.plot(points[0], points[1], 'r-')
     return ax
 
-def plot_shax_with_coords(mask,tck_points,resolution,ax=None,color='r'):
-    if ax is None:
-        fig, ax = plt.subplots()
-    coords=coords_from_img(mask,resolution)
-    ax.plot(tck_points[0], tck_points[1], color+'-')
-    ax.scatter(coords[:,0], coords[:,1],s=1,c=color)
+def plot_shax_with_coords(mask, tck, t, k, resolution, new_plot=False, color='r'):
+    if new_plot or not hasattr(plot_shax_with_coords, 'fig'):
+        plot_shax_with_coords.fig, plot_shax_with_coords.ax = plt.subplots()
+        plot_shax_with_coords.ax.cla()  # Clear the previous plot if new_plot is True
+    coords = coords_from_img(mask[k, :, :, t], resolution)
+    points = get_points_from_tck(tck, t, k)
+    plot_shax_with_coords.ax.plot(points[0], points[1], color+'-')
+    plot_shax_with_coords.ax.scatter(coords[:, 0], coords[:, 1], s=1, c=color)
     plt.gca().set_aspect('equal', adjustable='box')
-    return ax
-
-
+    plt.draw()
+    
 def plot_3d_SHAX(t, slice_thickness, tck_epi, tck_endo=None):
     """
     Plots the 3D SHAX spline shapes for a given t, where each k corresponds to a z location.
@@ -282,7 +283,8 @@ def plot_3d_SHAX(t, slice_thickness, tck_epi, tck_endo=None):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    for k in range(10):
+    K = len(tck_epi[0][0])
+    for k in range(K):
         z = -k * slice_thickness
         # Plot epicardial spline
         tck_epi_tk = (tck_epi[0][t][k], tck_epi[1][t][k], tck_epi[2][t][k])
