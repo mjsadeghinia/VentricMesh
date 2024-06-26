@@ -561,7 +561,7 @@ def plot_3d_points_on_figure(data_array, fig=None):
     if len(data_array.shape) == 1:
         x = np.array(data_array[0])
         y = np.array(data_array[1])
-        z = np.array(data_array[1])
+        z = np.array(data_array[2])
     else:
         x = data_array[:, 0]
         y = data_array[:, 1]
