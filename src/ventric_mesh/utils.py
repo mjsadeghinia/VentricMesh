@@ -558,9 +558,14 @@ def plot_3d_points_on_figure(data_array, fig=None):
         fig = go.Figure()
 
     # Extract x, y, z coordinates
-    x = data_array[:, 0]
-    y = data_array[:, 1]
-    z = data_array[:, 2]
+    if len(data_array.shape) == 1:
+        x = np.array(data_array[0])
+        y = np.array(data_array[1])
+        z = np.array(data_array[1])
+    else:
+        x = data_array[:, 0]
+        y = data_array[:, 1]
+        z = data_array[:, 2]
 
     # Add the points to the figure
     fig.add_trace(
