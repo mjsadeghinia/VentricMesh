@@ -8,8 +8,11 @@ from stl import mesh
 import warnings
 import gmsh
 from tqdm import tqdm
+from structlog import get_logger
 
-from .utils import *
+logger = get_logger()
+
+from ventric_mesh.utils import *
 
 
 # %%
@@ -62,6 +65,7 @@ def get_endo_epi(mask):
 
 # % Getting shax bsplines from epi and endo masks
 def get_shax_from_mask(mask, resolution, slice_thickness, smooth_level):
+    # The smooth_level is based on the area enclosed by the epi/endo points and it should.
     warnings.filterwarnings(
         "ignore", category=RuntimeWarning, module="scipy.interpolate"
     )
@@ -79,12 +83,15 @@ def get_shax_from_mask(mask, resolution, slice_thickness, smooth_level):
             # the if conditions is for the endo as there are not alway K
             if len(coords) > 0:
                 coords_sorted = sorting_coords(coords, resolution)
+                # Adding the first point to the end to make it periodic
+                np.vstack((coords_sorted,coords_sorted[0,:]))
                 # spline fitting
                 z = -(k) * slice_thickness
                 z_list = np.ones(coords_sorted.shape[0]) * z
+                area = calculate_area_points(coords_sorted)
                 tck_tk, u_epi = splprep(
                     [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
-                    s=smooth_level,
+                    s=smooth_level * area,
                     per=True,
                     k=3,
                 )
@@ -352,35 +359,29 @@ def create_apex_points_cloud(
 
 
 def create_points_cloud(
-    tck_shax, apex, seed_num_base=30, seed_num_threshold=8, scale=1
+    t, tck_shax, apex, seed_num_base=30, seed_num_threshold=8, scale=1
 ):
-    T_total = len(tck_shax[0])
-    int_step = 8  # a parameter to determine the possible seed numbers, which are multipicationo of int_step.
-    points_cloud = [[] for _ in range(T_total)]
-    for t in range(T_total):
-        K = len(tck_shax[0][t])
-        area_shax = np.zeros(K)
-        for k in range(K):
-            tck_tk = (tck_shax[0][t][k], tck_shax[1][t][k], tck_shax[2][t][k])
-            area_shax[k] = calculate_area_b_spline(tck_tk)
-            seed_num_k = int(
-                np.ceil(area_shax[k] / area_shax[0] * seed_num_base / int_step)
-                * int_step
-            )
-            if seed_num_k < seed_num_threshold or k == K - 3:
-                points_cloud[t], center = create_apex_points_cloud(
-                    points_cloud[t], tck_tk, k, K, apex[t], seed_num_threshold, scale
-                )
-                break
+    points_cloud = []
+    # K = len(tck_shax[0][t]) - shax_apex_skip
+    K = len(tck_shax[0][t])
+    area_shax = np.zeros(K)
+    for k in range(K):
+        tck_tk = (tck_shax[0][t][k], tck_shax[1][t][k], tck_shax[2][t][k])
+        area_shax[k] = calculate_area_b_spline(tck_tk)
+        seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
+        if seed_num_k < seed_num_threshold:
+            logger.error("The number of points for the last shax is less than the threshold")
+            break
+        else:
+            points = equally_spaced_points_on_spline(tck_tk, seed_num_k)
+            # ensuring that base is always at z=0
+            if k == 0:
+                points[:, 2] = 0
             else:
-                points = equally_spaced_points_on_spline(tck_tk, seed_num_k)
-                # ensuring that base is always at z=0
-                if k == 0:
-                    points[:, 2] = 0
-                else:
-                    points[:, 2] = np.mean(points[:, 2])
-                points_cloud[t].append(points)
-        points_cloud[t].append([center[0], center[1], apex[t, 2]])
+                points[:, 2] = np.mean(points[:, 2])
+            points_cloud.append(points)
+            
+        points_cloud.append([center[0], center[1], apex[t, 2]])
     return points_cloud
 
 
@@ -496,7 +497,8 @@ def create_mesh_slice_by_slice(points_cloud, scale=2):
     vertices = []
     faces = []
     points_cloud_aligned = align_points(points_cloud)
-    for k in range(len(points_cloud_aligned) - 1):
+    num_shax = len(points_cloud_aligned) - 1
+    for k in range(num_shax):
         slice1 = np.array(points_cloud_aligned[k])
         slice2 = np.array(points_cloud_aligned[k + 1])
         slice_faces = create_slice_mesh(slice1, slice2, scale)
@@ -694,9 +696,9 @@ def VentricMesh(
         mesh_merged_filename = result_folder + "Mesh_" + filename_suffix + ".stl"
     if save_flag:
         mesh_merged.save(mesh_merged_filename)
-    # mesh_epi=create_mesh(vertices_epi,faces_epi)
-    # mesh_epi_filename=result_folder+'Mesh_epi_'+filename_suffix+'.stl'
-    # mesh_epi.save(mesh_epi_filename)
+    mesh_epi=create_mesh(vertices_epi,faces_epi)
+    mesh_epi_filename=result_folder+'Mesh_epi_'+filename_suffix+'.stl'
+    mesh_epi.save(mesh_epi_filename)
     # mesh_endo=create_mesh(vertices_endo,faces_endo)
     # mesh_endo_filename=result_folder+'Mesh_endo_'+filename_suffix+'.stl'
     # mesh_endo.save(mesh_endo_filename)
