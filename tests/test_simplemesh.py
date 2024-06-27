@@ -51,10 +51,10 @@ def test_meshing():
     #
     resolution=0.1
     slice_thickness=1
-    seed_num_base_epi=10
-    seed_num_base_endo=8
-    num_z_sections_epi=10
-    num_z_sections_endo=6
+    seed_num_base_epi=20
+    seed_num_base_endo=15
+    num_z_sections_epi=15
+    num_z_sections_endo=10
     num_mid_layers_base=1
     t_mesh=0
 
@@ -76,10 +76,10 @@ def test_meshing_oneTimeFrame():
     #
     resolution=0.1
     slice_thickness=1
-    seed_num_base_epi=10
-    seed_num_base_endo=8
-    num_z_sections_epi=10
-    num_z_sections_endo=6
+    seed_num_base_epi=20
+    seed_num_base_endo=15
+    num_z_sections_epi=15
+    num_z_sections_endo=10
     num_mid_layers_base=1
     t_mesh=0
 
