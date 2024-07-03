@@ -679,7 +679,6 @@ def create_mesh_slice_by_slice(point_cloud, scale, apex_k):
         slice2 = np.array(points_cloud_aligned[k + 1])
         if k>apex_k:
             scale = 2
-            print('---------- APEX now being meshed ---------')
         slice_faces = create_slice_mesh(slice1, slice2, scale)
         faces_offset = sum(map(len, vertices))
         faces.append(slice_faces + faces_offset)
@@ -991,14 +990,16 @@ def print_mesh_quality_report(n_bins, file_path=None):
     if file is not None:
         file.close()
         
-def generate_3d_mesh_from_stl(stl_path, mesh_path):
+def generate_3d_mesh_from_stl(stl_path, mesh_path, MeshSizeMin=None, MeshSizeMax=None):
     gmsh.initialize()
     gmsh.option.setNumber("General.Verbosity", 1)
     gmsh.merge(stl_path)
     # Meshing options
     # # Set maximum element size
-    # gmsh.option.setNumber('Mesh.MeshSizeMin', 0.05)
-    # gmsh.option.setNumber('Mesh.MeshSizeMax', 0.2)
+    if MeshSizeMin is not None:
+        gmsh.option.setNumber('Mesh.MeshSizeMin', MeshSizeMin)
+    if MeshSizeMax is not None:
+        gmsh.option.setNumber('Mesh.MeshSizeMax', MeshSizeMax)
     gmsh.option.setNumber("Mesh.Algorithm3D", 1)  # 1: Delaunay, 4: Frontal
     n = gmsh.model.getDimension()
     s = gmsh.model.getEntities(n)
