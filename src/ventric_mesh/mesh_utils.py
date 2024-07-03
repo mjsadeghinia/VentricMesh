@@ -908,25 +908,49 @@ def triangle_aspect_ratio(vertices):
     return np.max(lengths) / shortest_altitude * np.sqrt(3) / 2
 
 
-def check_mesh_quality(mesh_data):
+def check_mesh_quality(mesh_data, file_path=None):
     """
     Get a mesh file and print out its quality metrics.
     """
-    print("===============================")
-    print("===============================")
+    if file_path is not None:
+        file = open(file_path, 'w')
+    else:
+        file = None
+    line = "======= Mesh Statistics ======="
+    print(line)
+    if file:
+        file.write(line + '\n')
     # Basic Properties
-    print("Triangles:", len(mesh_data.vectors))
+    line = f"Triangles: {len(mesh_data.vectors)}"
+    print(line)
+    if file:
+        file.write(line + '\n')
     # Triangle Quality
     aspect_ratios = [triangle_aspect_ratio(triangle) for triangle in mesh_data.vectors]
     average_aspect_ratio = np.mean(aspect_ratios)
     std_aspect_ratio = np.std(aspect_ratios)
-    print("Average Aspect Ratio:", np.round(average_aspect_ratio, 3))
-    print("Standard Deviation of Aspect Ratios:", np.round(std_aspect_ratio, 3))
+    
+    line = f"Average Aspect Ratio: {np.round(average_aspect_ratio, 3)}"
+    print(line)
+    if file:
+        file.write(line + '\n')
+    print()
+    line = f"Standard Deviation of Aspect Ratios: {np.round(std_aspect_ratio, 3)}"
+    print(line)
+    if file:
+        file.write(line + '\n')
     # Count the number of triangles with an aspect ratio larger than 5
     num_large_aspect_ratio = sum(1 for ratio in aspect_ratios if ratio > 5)
-    print("Number of Triangles with Aspect Ratio > 5:", num_large_aspect_ratio)
-    print("===============================")
-    print("===============================")
+    line = f"Number of Triangles with Aspect Ratio > 5: {num_large_aspect_ratio}"
+    print(line)
+    if file:
+        file.write(line + '\n')
+    line = "==============================="
+    print(line)
+    print(line)
+    if file:
+        file.write(line + '\n')
+        file.write(line + '\n')
     return aspect_ratios
 
 
@@ -942,10 +966,14 @@ def print_mesh_quality_report(n_bins, file_path=None):
     counts, bin_edges = np.histogram(q, bins=n_bins, range=(0, 1))
     
     if file_path is not None:
-        file = open(file_path, 'w')
+        file = open(file_path, 'a')
     else:
         file = None
     
+    line = "Quality report of the final volumetri mesh:"
+    print(line)
+    if file:
+        file.write(line + '\n')
     for i in range(n_bins):
         line = f"{bin_edges[i]:.2f} < quality < {bin_edges[i+1]:.2f} : {counts[i]:>10} elements"
         print(line)
@@ -977,8 +1005,7 @@ def generate_3d_mesh_from_stl(stl_path, mesh_path):
     gmsh.model.mesh.Recombine3DAll = 0
     gmsh.model.mesh.generate(3)
     gmsh.write(mesh_path)
-    print("Quality report of the final volumetri mesh:")
-    print_mesh_quality_report(10, file_path=stl_path[-4]+'_report.txt')
+    print_mesh_quality_report(10, file_path=stl_path[:-4]+'_report.txt')
     print("===============================")
     print("===============================")
     gmsh.finalize()
