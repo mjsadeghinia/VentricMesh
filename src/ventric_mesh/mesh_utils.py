@@ -666,7 +666,7 @@ def create_slice_mesh(slice1, slice2, scale):
     return faces
 
 
-def create_mesh_slice_by_slice(point_cloud, scale=2):
+def create_mesh_slice_by_slice(point_cloud, scale):
     vertices = []
     faces = []
     points_cloud_aligned = align_points(point_cloud)
@@ -850,12 +850,13 @@ def VentricMesh(
     points_cloud_endo,
     t_mesh,
     num_mid_layers_base,
+    scale_for_delauny=1.2,
     save_flag=True,
     filename_suffix="",
     result_folder="",
 ):
-    vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi[t_mesh])
-    vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo[t_mesh])
+    vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi[t_mesh], scale=scale_for_delauny)
+    vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo[t_mesh], scale=scale_for_delauny)
     points_cloud_base = create_base_point_cloud(
         points_cloud_endo, points_cloud_epi, num_mid_layers_base
     )
@@ -930,7 +931,7 @@ def check_mesh_quality(mesh_data):
 
 
 # %%
-def print_mesh_quality_report(n_bins):
+def print_mesh_quality_report(n_bins, file_path=None):
     # Retrieve statistics about the mesh
     # num_elem=gmsh.model.mesh.getMaxElementTag()
     elem_tags = gmsh.model.mesh.getElementsByType(
@@ -939,17 +940,29 @@ def print_mesh_quality_report(n_bins):
     # num_elem=elem_tags[0].shape[0]
     q = gmsh.model.mesh.getElementQualities(elem_tags[0])
     counts, bin_edges = np.histogram(q, bins=n_bins, range=(0, 1))
+    
+    if file_path is not None:
+        file = open(file_path, 'w')
+    else:
+        file = None
+    
     for i in range(n_bins):
-        print(
-            f"{bin_edges[i]:.2f} < quality < {bin_edges[i+1]:.2f} : {counts[i]:>10} elements"
-        )
+        line = f"{bin_edges[i]:.2f} < quality < {bin_edges[i+1]:.2f} : {counts[i]:>10} elements"
+        print(line)
+        if file:
+            file.write(line + '\n')
 
-
+    if file is not None:
+        file.close()
+        
 def generate_3d_mesh_from_stl(stl_path, mesh_path):
     gmsh.initialize()
     gmsh.option.setNumber("General.Verbosity", 1)
     gmsh.merge(stl_path)
     # Meshing options
+    # # Set maximum element size
+    # gmsh.option.setNumber('Mesh.MeshSizeMin', 0.05)
+    # gmsh.option.setNumber('Mesh.MeshSizeMax', 0.2)
     gmsh.option.setNumber("Mesh.Algorithm3D", 1)  # 1: Delaunay, 4: Frontal
     n = gmsh.model.getDimension()
     s = gmsh.model.getEntities(n)
@@ -965,7 +978,7 @@ def generate_3d_mesh_from_stl(stl_path, mesh_path):
     gmsh.model.mesh.generate(3)
     gmsh.write(mesh_path)
     print("Quality report of the final volumetri mesh:")
-    print_mesh_quality_report(10)
+    print_mesh_quality_report(10, file_path=stl_path[-4]+'_report.txt')
     print("===============================")
     print("===============================")
     gmsh.finalize()
