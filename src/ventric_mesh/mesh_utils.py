@@ -665,7 +665,7 @@ def create_slice_mesh(slice1, slice2, scale):
     threshold = adjusted_slice1.shape[0]
     faces = filter_simplices(tri.simplices, threshold)
     faces = clean_faces(faces, flat_slice1.shape[0])
-    plot_delaunay_2d(tri.simplices, combined_slice)
+    #plot_delaunay_2d(tri.simplices, combined_slice)
     return faces
 
 
