@@ -534,6 +534,7 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshol
 def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
     T = len(tck_shax[0])
     point_cloud = [[] for t in range(T)]
+    apex_k = np.zeros(T)
     for t in tqdm(range(T), desc="Creating pointcloud for mesh generation", ncols=100):
         K = len(tck_shax[0][t])
         area_shax = np.zeros(K)
@@ -542,6 +543,7 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
             area_shax[k] = calculate_area_b_spline(tck_tk)
             seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
             if seed_num_k < seed_num_threshold:
+                apex_k[t] = k if apex_k[t] != 0 else apex_k[t]
                 point_cloud = create_apex_point_cloud(
                     point_cloud, t, k, tck_shax, apex, seed_num_threshold
                 )
@@ -555,7 +557,7 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
                     points[:, 2] = np.mean(points[:, 2])
                 point_cloud[t].append(points)
 
-    return point_cloud
+    return point_cloud, apex_k
 
 
 # ----------------------------------------------------------------
@@ -663,10 +665,11 @@ def create_slice_mesh(slice1, slice2, scale):
     threshold = adjusted_slice1.shape[0]
     faces = filter_simplices(tri.simplices, threshold)
     faces = clean_faces(faces, flat_slice1.shape[0])
+    plot_delaunay_2d(tri.simplices, combined_slice)
     return faces
 
 
-def create_mesh_slice_by_slice(point_cloud, scale):
+def create_mesh_slice_by_slice(point_cloud, scale, apex_k):
     vertices = []
     faces = []
     points_cloud_aligned = align_points(point_cloud)
@@ -674,6 +677,9 @@ def create_mesh_slice_by_slice(point_cloud, scale):
     for k in range(num_shax):
         slice1 = np.array(points_cloud_aligned[k])
         slice2 = np.array(points_cloud_aligned[k + 1])
+        if k>apex_k:
+            scale = 2
+            print('---------- APEX now being meshed ---------')
         slice_faces = create_slice_mesh(slice1, slice2, scale)
         faces_offset = sum(map(len, vertices))
         faces.append(slice_faces + faces_offset)
@@ -836,13 +842,13 @@ def NodeGenerator(
     tck_shax_endo = get_shax_from_lax(
         tck_lax_endo, apex_endo, num_z_sections_endo, z_sections_flag_endo
     )
-    points_cloud_endo = create_point_cloud(
+    points_cloud_endo, apex_k_endo = create_point_cloud(
         tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=8
     )
-    points_cloud_epi = create_point_cloud(
+    points_cloud_epi, apex_k_epi = create_point_cloud(
         tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=8
     )
-    return points_cloud_epi, points_cloud_endo
+    return points_cloud_epi, points_cloud_endo, apex_k_epi, apex_k_endo
 
 
 def VentricMesh(
@@ -850,13 +856,15 @@ def VentricMesh(
     points_cloud_endo,
     t_mesh,
     num_mid_layers_base,
+    apex_k_epi,
+    apex_k_endo,
     scale_for_delauny=1.2,
     save_flag=True,
     filename_suffix="",
     result_folder="",
 ):
-    vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi[t_mesh], scale=scale_for_delauny)
-    vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo[t_mesh], scale=scale_for_delauny)
+    vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi[t_mesh], scale=scale_for_delauny, apex_k=apex_k_epi[t_mesh])
+    vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo[t_mesh], scale=scale_for_delauny, apex_k=apex_k_endo[t_mesh])
     points_cloud_base = create_base_point_cloud(
         points_cloud_endo, points_cloud_epi, num_mid_layers_base
     )
