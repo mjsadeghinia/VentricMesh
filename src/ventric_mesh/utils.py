@@ -11,7 +11,10 @@ import math
 import plotly.graph_objects as go
 from scipy.interpolate import BSpline
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from matplotlib.path import Path
+from structlog import get_logger
 
+logger = get_logger()
 
 # ----------------------------------------------------------------
 # ----------------------    Utilities    -------------------------
@@ -168,8 +171,12 @@ def bspline_angle_intersection(
     """
     coords = splev(np.linspace(0, 1, 1000), tck)
     coords = np.array(coords).T
-    if center is None:
-        center_coords = np.mean(coords, axis=0)
+    path = Path(coords[:,:2])
+    is_inside = path.contains_point(center)
+    if center is None or not is_inside:
+        center_coords = np.mean(coords[:,:2], axis=0)
+        logger.warning(f"LV center is outside of the shax coordinates")
+        logger.warning(f"LV center is shifted from {center} to {center_coords}")
     else:
         center_coords = center
     find_line_coefficients = lambda center_coords, theta: (
