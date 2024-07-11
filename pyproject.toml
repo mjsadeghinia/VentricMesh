@@ -27,6 +27,7 @@ dependencies = [
     "numpy",
     "matplotlib",
     "plotly",
+    "structlog",
     "gmsh"
 ]
 

@@ -11,7 +11,10 @@ import math
 import plotly.graph_objects as go
 from scipy.interpolate import BSpline
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from matplotlib.path import Path
+from structlog import get_logger
 
+logger = get_logger()
 
 # ----------------------------------------------------------------
 # ----------------------    Utilities    -------------------------
@@ -168,8 +171,12 @@ def bspline_angle_intersection(
     """
     coords = splev(np.linspace(0, 1, 1000), tck)
     coords = np.array(coords).T
-    if center is None:
-        center_coords = np.mean(coords, axis=0)
+    path = Path(coords[:,:2])
+    is_inside = path.contains_point(center)
+    if center is None or not is_inside:
+        center_coords = np.mean(coords[:,:2], axis=0)
+        logger.warning(f"LV center is outside of the shax coordinates")
+        logger.warning(f"LV center is shifted from {center} to {center_coords}")
     else:
         center_coords = center
     find_line_coefficients = lambda center_coords, theta: (
@@ -263,7 +270,7 @@ def calculate_area_b_spline(tck):
 
 
 def calculate_area_points(points):
-    tck_tk, u_epi = splprep([points[:, 0], points[:, 1]], s=1, per=True, k=3)
+    tck_tk, u_epi = splprep([points[:, 0], points[:, 1]], s=0, per=True, k=3)
     area = calculate_area_b_spline(tck_tk)
     return area
 
@@ -558,9 +565,14 @@ def plot_3d_points_on_figure(data_array, fig=None):
         fig = go.Figure()
 
     # Extract x, y, z coordinates
-    x = data_array[:, 0]
-    y = data_array[:, 1]
-    z = data_array[:, 2]
+    if len(data_array.shape) == 1:
+        x = np.array(data_array[0])
+        y = np.array(data_array[1])
+        z = np.array(data_array[2])
+    else:
+        x = data_array[:, 0]
+        y = data_array[:, 1]
+        z = data_array[:, 2]
 
     # Add the points to the figure
     fig.add_trace(
