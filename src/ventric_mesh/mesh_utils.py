@@ -658,14 +658,22 @@ def create_slice_mesh(slice1, slice2, scale):
         flat_slice2 = slice2[:, :2]
     else:
         flat_slice2 = slice2[:2]
-    adjusted_slice1 = expand_slice(flat_slice1, scale)
-    combined_slice = np.vstack([adjusted_slice1, flat_slice2])
+    # Expand the slice with larger area
+    if calculate_area_points(flat_slice1)>=calculate_area_points(flat_slice2):
+        adjusted_slice1 = expand_slice(flat_slice1, scale)
+        combined_slice = np.vstack([adjusted_slice1, flat_slice2])
+        # Perform Delaunay triangulation
+        threshold = adjusted_slice1.shape[0]
+    else:
+        adjusted_slice2 = expand_slice(flat_slice2, scale)
+        combined_slice = np.vstack([flat_slice1, adjusted_slice2])
+        threshold = flat_slice1.shape[0]
     # Perform Delaunay triangulation
     tri = Delaunay(combined_slice)
-    threshold = adjusted_slice1.shape[0]
     faces = filter_simplices(tri.simplices, threshold)
     faces = clean_faces(faces, flat_slice1.shape[0])
-    #plot_delaunay_2d(tri.simplices, combined_slice)
+    # plot_delaunay_2d(tri.c, combined_slice)
+    # plot_delaunay_2d(faces, combined_slice)
     return faces
 
 
