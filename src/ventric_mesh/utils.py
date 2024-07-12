@@ -270,9 +270,12 @@ def calculate_area_b_spline(tck):
 
 
 def calculate_area_points(points):
-    tck_tk, u_epi = splprep([points[:, 0], points[:, 1]], s=0, per=True, k=3)
-    area = calculate_area_b_spline(tck_tk)
-    return area
+    if points.ndim == 1:
+        return 0
+    else:
+        tck_tk, u_epi = splprep([points[:, 0], points[:, 1]], s=0, per=True, k=3)
+        area = calculate_area_b_spline(tck_tk)
+        return area
 
 
 # ----------------------------------------------------------------
