@@ -501,7 +501,7 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex):
     num_slices = 2
     apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
     iter = 0
-    while apex_seed_num[-2]-apex_seed_num[-1]>4 and iter<10:
+    while apex_seed_num[-2]-apex_seed_num[-1]>8 and iter<10:
         num_slices += 1
         iter += 1
         apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
@@ -518,8 +518,9 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex):
 
     z_last_section = last_slice_points[0, 2]
     z_apex = center[2]
-    # z_sections = third_order_interpolate(z_last_section, z_apex, num_slices)[1:]
-    z_sections = np.linspace(z_last_section,z_apex,num_slices)[1:]
+    # z_sections = third_order_interpolate(z_apex,z_last_section,num_slices)[:-1]
+    # z_sections = np.linspace(z_last_section,z_apex,num_slices)[1:]
+    z_sections = third_order_interpolate(z_apex,z_last_section,num_slices)[:-1][::-1]
     tck_apex_shax = create_apex_shax(apex_tck_lax, z_sections)
 
     for n, apex_seed_num_k in enumerate(apex_seed_num[1:]):
