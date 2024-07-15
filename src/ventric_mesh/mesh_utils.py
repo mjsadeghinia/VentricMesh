@@ -323,68 +323,23 @@ def check_apex_change(apex, center):
 
     return
 
-def prepare_before_last_slice(before_last_slice_points, last_slice_points, center):
-    # first we need to find the same number of points of last_slice on before_last_slice
-    tck_before_last_slice, _ = splprep(
-                    [before_last_slice_points[:, 0], before_last_slice_points[:, 1], before_last_slice_points[:,2]],
-                    s=0,
-                    per=True,
-                    k=3,
-                )
-    before_last_slice_points_upscaled = np.array(splev(np.linspace(0, 1, 1000), tck_before_last_slice)).T
 
-    # Function to compute the distance from a point to a line defined by two points (line_point1, line_point2)
-    def distance_point_to_line(point, line_point1, line_point2):
-        line_vec = line_point2 - line_point1
-        point_vec = point - line_point1
-        line_len = np.linalg.norm(line_vec)
-        line_unitvec = line_vec / line_len
-        point_vec_scaled = point_vec / line_len
-        t = np.dot(line_unitvec, point_vec_scaled)    
-        nearest = line_point1 + t * line_vec
-        distance = np.linalg.norm(point - nearest)
-        return distance
-
-    # Function to compute the sum of distances
-    def compute_distances(pnt, center, before_last_slice_points_upscaled):
-        distances_to_line = np.array([distance_point_to_line(pnt, center, bls_point) for bls_point in before_last_slice_points_upscaled])
-        distances_to_point = np.linalg.norm(before_last_slice_points_upscaled - pnt, axis=1)
-        sum_distances = np.sqrt(distances_to_line**2 + distances_to_point**2)
-        return sum_distances
-
-    # Main processing loop
-    result_points = []
-    for pnt in last_slice_points:
-        sum_distances = compute_distances(pnt, center, before_last_slice_points_upscaled)
-        min_index = np.argmin(sum_distances)
-        result_points.append(before_last_slice_points_upscaled[min_index])
-
-    result_points = np.array(result_points)
-    return result_points
-
-def create_apex_lax_points(before_last_slice_points, last_slice_points, center):
-    
-    prepared_before_last_slice_points = prepare_before_last_slice(before_last_slice_points, last_slice_points, center)
-
-    K = 2
-    all_points = []
-    all_points.append(prepared_before_last_slice_points)
-    all_points.append(last_slice_points)
-
-    n_curves = int(last_slice_points.shape[0] / 2)
+def create_apex_lax_points(old_shax_points):
+    K_apex = len(old_shax_points)
+    n_curves = int(old_shax_points[0].shape[0] / 2)
+    center = np.mean(old_shax_points, axis=1)[-1]
 
     # We find the points for each curves of LAX
     apex_lax_points = []
     for m in range(n_curves):
         points_1 = []
         points_2 = []
-        for k in range(K):
-            points_1.append(all_points[k][m])
-            points_2.append(all_points[k][m + n_curves])
+        for k in range(K_apex):
+            points_1.append(old_shax_points[k][m])
+            points_2.append(old_shax_points[k][m + n_curves])
         points_1 = np.array(points_1)
         points_2 = np.array(points_2[::-1])
         apex_lax_points.append(np.vstack((points_1, center, points_2)))
-
 
     return apex_lax_points
 
@@ -433,10 +388,11 @@ def get_apex_shax_points_from_lax(apex_tck_lax, z):
     return shax_points
 
 
-def create_apex_shax(apex_tck_lax, z_sections):
+def create_apex_shax(apex_shax_points, z_sections):
     t_nurbs, c_nurbs, k_nurbs = [], [], []
-    for z in z_sections:
-        shax_points = get_apex_shax_points_from_lax(apex_tck_lax, z)
+    for i, z in enumerate(z_sections):
+        shax_points = apex_shax_points[i]
+        shax_points[:,2] = z
         tck_epi_tk, u_epi = splprep(
             [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
             s=0,
@@ -448,7 +404,6 @@ def create_apex_shax(apex_tck_lax, z_sections):
         k_nurbs.append(tck_epi_tk[2])  # Degree
     tck_apex_shax = (t_nurbs, c_nurbs, k_nurbs)
     return tck_apex_shax
-
 
 
 def pop_too_close_shax(old_shax_points):
@@ -489,9 +444,8 @@ def find_midpoints(last_slice_points, center, m):
     return mid_points
 
 
-def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex):
+def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshold):
     K = len(tck_shax[0][t])
-    
     num_points_last_slice = point_cloud[t][k - 1].shape[0]
     last_slice_points = point_cloud[t][k - 1]
     center = np.mean(last_slice_points, axis=0)
@@ -501,7 +455,7 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex):
     num_slices = 2
     apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
     iter = 0
-    while apex_seed_num[-2]-apex_seed_num[-1]>8 and iter<10:
+    while apex_seed_num[-2]-apex_seed_num[-1]>4 and iter<5:
         num_slices += 1
         iter += 1
         apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
@@ -509,19 +463,12 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex):
         logger.warning(f'Number of apex shax may not be sufficient, it is advised to decrease the seed_num_threshold')
 
     m = len(apex_seed_num) - 1
-    before_last_slice_points = point_cloud[t][k - 2]
-    apex_lax_points = create_apex_lax_points(before_last_slice_points, last_slice_points, center)
-    apex_tck_lax = get_apex_lax(apex_lax_points)
-    
-    
-    # old_shax_points = find_midpoints(last_slice_points, center, m)
+    old_shax_points = find_midpoints(last_slice_points, center, m)
 
-    z_last_section = last_slice_points[0, 2]
+    z_last_section = old_shax_points[0][0, 2]
     z_apex = center[2]
-    # z_sections = third_order_interpolate(z_apex,z_last_section,num_slices)[:-1]
-    # z_sections = np.linspace(z_last_section,z_apex,num_slices)[1:]
-    z_sections = third_order_interpolate(z_apex,z_last_section,num_slices)[:-1][::-1]
-    tck_apex_shax = create_apex_shax(apex_tck_lax, z_sections)
+    z_sections = third_order_interpolate(z_last_section, z_apex, num_slices)[1:]
+    tck_apex_shax = create_apex_shax(old_shax_points[1:], z_sections)
 
     for n, apex_seed_num_k in enumerate(apex_seed_num[1:]):
         tck_apex_shax_k = (
@@ -610,7 +557,7 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
             if seed_num_k < seed_num_threshold:
                 apex_k[t] = k if apex_k[t] == 0 else apex_k[t]
                 point_cloud = create_apex_point_cloud(
-                    point_cloud, t, k, tck_shax, apex
+                    point_cloud, t, k, tck_shax, apex, seed_num_threshold
                 )
                 break
             else:
