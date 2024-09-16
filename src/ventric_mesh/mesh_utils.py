@@ -388,10 +388,11 @@ def get_apex_shax_points_from_lax(apex_tck_lax, z):
     return shax_points
 
 
-def create_apex_shax(apex_tck_lax, num_apex_slices, z_sections):
+def create_apex_shax(apex_shax_points, z_sections):
     t_nurbs, c_nurbs, k_nurbs = [], [], []
-    for z in z_sections:
-        shax_points = get_apex_shax_points_from_lax(apex_tck_lax, z)
+    for i, z in enumerate(z_sections):
+        shax_points = apex_shax_points[i]
+        shax_points[:,2] = z
         tck_epi_tk, u_epi = splprep(
             [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
             s=0,
@@ -435,9 +436,8 @@ def check_apex_shift(apex, center):
 
 def find_midpoints(last_slice_points, center, m):
     mid_points = []
-    steps = np.linspace(0, 1, m + 2)[
-        :-1
-    ]  # m equally spaced steps between 0 and 1, excluding 0 and 1
+    # steps = np.linspace(0, 1, m + 2)[:-1]  # m equally spaced steps between 0 and 1, excluding 0 and 1
+    steps = third_order_interpolate(0, 1, m + 2)[:-1]
     for step in steps:
         interpolated_points = last_slice_points * (1 - step) + center * step
         mid_points.append(interpolated_points)
@@ -448,45 +448,29 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshol
     K = len(tck_shax[0][t])
     num_points_last_slice = point_cloud[t][k - 1].shape[0]
     last_slice_points = point_cloud[t][k - 1]
-    # if K-k<2:
-    # logger.warning("The number of shax slices are too low, Try to re-run get_shax_from_lax with higher value for num_z_sections")
     center = np.mean(last_slice_points, axis=0)
     center[2] = apex[t][2]
     check_apex_shift(apex[t], center)
+    # if the area is too big it should be scale so more intermediatry slices are considerd
+    num_slices = 2
+    apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
+    iter = 0
+    while apex_seed_num[-2]-apex_seed_num[-1]>4 and iter<5:
+        num_slices += 1
+        iter += 1
+        apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
+    if iter==5:    
+        logger.warning(f'Number of apex shax may not be sufficient, it is advised to decrease the seed_num_threshold')
 
-    scale_factor = (
-        num_points_last_slice / seed_num_threshold
-    )  # if the area is too big it should be scale so more intermediatry slices are considerd
-    apex_slices = np.floor(np.linspace(num_points_last_slice, 4, int(scale_factor * 4)))
-
-    m = len(apex_slices) - 1
+    m = len(apex_seed_num) - 1
     old_shax_points = find_midpoints(last_slice_points, center, m)
-    # else:
-    #     num_points_last_slice_even = int(num_points_last_slice / 2) * 2 # ensuring that the num_points is a even so we could have n/2 lax curves for apex
-    #     old_shax_points = []
-    #     for l in range(K-k+1):
-    #         tck_tk = (tck_shax[0][t][k-1+l], tck_shax[1][t][k-1+l], tck_shax[2][t][k-1+l])
-    #         slice_points = equally_spaced_points_on_spline(tck_tk, num_points_last_slice_even)
-    #         slice_points[:, 2] = np.mean(slice_points[:, 2])
-    #         old_shax_points.append(slice_points)
-    #         old_shax_points = pop_too_close_shax(old_shax_points)
-    #     # defining the new apex point based on the center of the last shax point
-    #     center = np.mean(old_shax_points, axis=1)[-1]
-    #     check_apex_shift(apex[t],center)
-
-    apex_lax_points = create_apex_lax_points(old_shax_points)
-    apex_tck_lax = get_apex_lax(apex_lax_points)
-    num_apex_slices = get_num_apex_slices(point_cloud, t, k, apex, seed_num_threshold)
 
     z_last_section = old_shax_points[0][0, 2]
     z_apex = center[2]
-    z_sections = np.linspace(z_last_section, z_apex, num_apex_slices + 2)[1:-1]
-    tck_apex_shax = create_apex_shax(apex_tck_lax, num_apex_slices, z_sections)
+    z_sections = third_order_interpolate(z_last_section, z_apex, num_slices)[1:]
+    tck_apex_shax = create_apex_shax(old_shax_points[1:], z_sections)
 
-    apex_seed_num = np.floor(
-        np.linspace(num_points_last_slice, 4, len(z_sections) + 1)
-    )[1:]
-    for n, apex_seed_num_k in enumerate(apex_seed_num):
+    for n, apex_seed_num_k in enumerate(apex_seed_num[1:]):
         tck_apex_shax_k = (
             tck_apex_shax[0][n],
             tck_apex_shax[1][n],
@@ -529,7 +513,35 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshol
     #     )
     # fnmae = 'test.html'
     # fig.write_html(fnmae)
+    
+def third_order_interpolate(start_point, end_point, num_point):
+    # Define x values corresponding to the z values
+    x_values = np.linspace(0, num_point + 1, num_point)
 
+    # Define the third-order polynomial coefficients
+    # Let's assume a third-order polynomial of the form z = ax^3 + bx^2 + cx + d
+    # We need to determine coefficients a, b, c, d such that:
+    # z(0) = z_last_section
+    # z(num_apex_slices + 1) = z_apex
+
+    # Create a system of linear equations to solve for a, b, c, d
+    A = np.array([
+        [0**3, 0**2, 0, 1],
+        [(num_point + 1)**3, (num_point + 1)**2, (num_point + 1), 1],
+        [(num_point / 2)**3, (num_point / 2)**2, (num_point / 2), 1],
+        [(num_point / 3)**3, (num_point / 3)**2, (num_point / 3), 1]
+    ])
+    b = np.array([start_point, end_point, (start_point + end_point) / 2, (2 * start_point + end_point) / 3])
+
+    # Solve for coefficients a, b, c, d
+    coefficients = np.linalg.solve(A, b)
+
+    # Create the polynomial function from the coefficients
+    polynomial = np.poly1d(coefficients)
+
+    # Evaluate the polynomial at the x values, excluding the end points
+    z_sections = polynomial(x_values)
+    return z_sections
 
 def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
     T = len(tck_shax[0])
@@ -543,7 +555,7 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
             area_shax[k] = calculate_area_b_spline(tck_tk)
             seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
             if seed_num_k < seed_num_threshold:
-                apex_k[t] = k if apex_k[t] != 0 else apex_k[t]
+                apex_k[t] = k if apex_k[t] == 0 else apex_k[t]
                 point_cloud = create_apex_point_cloud(
                     point_cloud, t, k, tck_shax, apex, seed_num_threshold
                 )
@@ -658,14 +670,22 @@ def create_slice_mesh(slice1, slice2, scale):
         flat_slice2 = slice2[:, :2]
     else:
         flat_slice2 = slice2[:2]
-    adjusted_slice1 = expand_slice(flat_slice1, scale)
-    combined_slice = np.vstack([adjusted_slice1, flat_slice2])
+    # Expand the slice with larger area
+    if calculate_area_points(flat_slice1)>=calculate_area_points(flat_slice2):
+        adjusted_slice1 = expand_slice(flat_slice1, scale)
+        combined_slice = np.vstack([adjusted_slice1, flat_slice2])
+        # Perform Delaunay triangulation
+        threshold = adjusted_slice1.shape[0]
+    else:
+        adjusted_slice2 = expand_slice(flat_slice2, scale)
+        combined_slice = np.vstack([flat_slice1, adjusted_slice2])
+        threshold = flat_slice1.shape[0]
     # Perform Delaunay triangulation
     tri = Delaunay(combined_slice)
-    threshold = adjusted_slice1.shape[0]
     faces = filter_simplices(tri.simplices, threshold)
     faces = clean_faces(faces, flat_slice1.shape[0])
-    #plot_delaunay_2d(tri.simplices, combined_slice)
+    # plot_delaunay_2d(tri.c, combined_slice)
+    # plot_delaunay_2d(faces, combined_slice)
     return faces
 
 
