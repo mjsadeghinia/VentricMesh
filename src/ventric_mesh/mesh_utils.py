@@ -134,30 +134,26 @@ def create_lax_points(sample_points, apex_threshold, slice_thickness):
     This means that for each time step we have n_curves each has 2*K+1 which K is the number of SHAX slices and the 1 corresponds to apex.
     The apex
     """
-    T_total = len(sample_points)
-    n_points = len(sample_points[0][0])
+    n_points = len(sample_points[0])
     n_curves = int(n_points / 2)
-    LAX_points = [[] for _ in range(T_total)]
-    apex = np.zeros((T_total, 3))
-    # for t in range(T_total):
-    for t in tqdm(range(T_total), desc="Creating LAX Curves", ncols=100):
-        K = len(sample_points[t])
-        # We find the center of the last slice SHAX
-        Last_SHAX_points = sample_points[t][-1][:, :2]
-        apex[t, :] = get_apex_coords(
-            Last_SHAX_points, K, apex_threshold[t], slice_thickness
-        )
-        # We find the points for each curves of LAX
-        for m in range(n_curves):
-            points_1 = []
-            points_2 = []
-            for k in range(K):
-                points_1.append(sample_points[t][k][m])
-                points_2.append(sample_points[t][k][m + n_curves])
-            points_1 = np.array(points_1)
-            points_2 = np.array(points_2[::-1])
-            points = np.vstack((points_1, apex[t, :], points_2))
-            LAX_points[t].append(points)
+    LAX_points = []
+    K = len(sample_points)
+    # We find the center of the last slice SHAX
+    Last_SHAX_points = sample_points[-1][:, :2]
+    apex = get_apex_coords(
+        Last_SHAX_points, K, apex_threshold, slice_thickness
+    )
+    # We find the points for each curves of LAX
+    for m in tqdm(range(n_curves), desc="Creating LAX Curves", ncols=100):
+        points_1 = []
+        points_2 = []
+        for k in range(K):
+            points_1.append(sample_points[k][m])
+            points_2.append(sample_points[k][m + n_curves])
+        points_1 = np.array(points_1)
+        points_2 = np.array(points_2[::-1])
+        points = np.vstack((points_1, apex, points_2))
+        LAX_points.append(points)
     return LAX_points, apex
 
 
