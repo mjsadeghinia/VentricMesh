@@ -61,16 +61,13 @@ def get_endo_epi(mask):
 # ------------ Creating BSplines and Smooth Contours -------------
 # ----------------------------------------------------------------
 def get_coords_from_mask(mask, resolution):
-    if len(mask.shape) == 3:
-        mask = np.expand_dims(mask, axis=-1)
-    K, I, _, T_total = mask.shape
-    coords = [[] for _ in range(T_total)]
-    for t in range(T_total):
-        for k in range(K):
-            img = mask[k, :, :, t]
-            coords_tk = coords_from_img(img, resolution)
-            if len(coords_tk)>0:
-                coords[t].append(coords_tk)
+    K, I, _ = mask.shape
+    coords = []
+    for k in range(K):
+        img = mask[k, :, :]
+        coords_k = coords_from_img(img, resolution)
+        if len(coords_k)>0:
+            coords.append(coords_k)
     return coords
 
 # % Getting shax bsplines from epi and endo masks
