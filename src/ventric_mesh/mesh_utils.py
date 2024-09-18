@@ -112,12 +112,9 @@ def get_sample_points_from_shax(tck_shax, n_points):
 
 
 def get_apex_threshold(points_epi, points_endo):
-    T_total = len(points_endo)
-    threshold = np.zeros(T_total)
-    for t in range(T_total):
-        K_endo = len(points_endo[t]) - 1
-        a_epi = calculate_area_points(points_epi[t][K_endo])
-        threshold[t] = a_epi * 0.05
+    K_endo = len(points_endo) - 1
+    a_epi = calculate_area_points(points_epi[K_endo])
+    threshold = a_epi * 0.05
     return threshold
 
 
