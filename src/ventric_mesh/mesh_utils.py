@@ -76,35 +76,25 @@ def get_shax_from_coords(coords, resolution, slice_thickness, smooth_level):
     warnings.filterwarnings(
         "ignore", category=RuntimeWarning, module="scipy.interpolate"
     )
-    if not isinstance(coords[0],list):
-        coords = np.expand_dims(coords, axis=0)
-    T_total = len(coords)
-    K = len(coords[0])
-    t_nurbs = [[] for _ in range(T_total)]
-    c_nurbs = [[] for _ in range(T_total)]
-    k_nurbs = [[] for _ in range(T_total)]
-    for t in tqdm(range(T_total), desc="Creating SHAX Curves", ncols=100):
-        for k in range(K):
-            coord_tk = coords[t][k]
-            coords_sorted = sorting_coords(coord_tk, resolution)
-            # Adding the first point to the end to make it periodic
-            coords_sorted = np.vstack((coords_sorted, coords_sorted[0, :]))
+    K = len(coords)
+    tck = []
+    for k in tqdm(range(K), desc="Creating SHAX Curves", ncols=100):
+        coord_k = coords[k]
+        coords_sorted = sorting_coords(coord_k, resolution)
+        # Adding the first point to the end to make it periodic
+        coords_sorted = np.vstack((coords_sorted, coords_sorted[0, :]))
 
-            # spline fitting
-            z = -(k) * slice_thickness
-            z_list = np.ones(coords_sorted.shape[0]) * z
-            area = calculate_area_points(coords_sorted)
-            tck_tk, u_epi = splprep(
-                [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
-                s=smooth_level * area,
-                per=True,
-                k=3,
-            )
-            # spline evaluations
-            t_nurbs[t].append(tck_tk[0])  # Knot vector
-            c_nurbs[t].append(tck_tk[1])  # Coefficients
-            k_nurbs[t].append(tck_tk[2])  # Degree
-    tck = (t_nurbs, c_nurbs, k_nurbs)
+        # spline fitting
+        z = -(k) * slice_thickness
+        z_list = np.ones(coords_sorted.shape[0]) * z
+        area = calculate_area_points(coords_sorted)
+        tck_k, u_epi = splprep(
+            [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
+            s=smooth_level * area,
+            per=True,
+            k=3,
+        )
+        tck.append(tck_k)        
     return tck
 
 
