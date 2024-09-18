@@ -130,9 +130,9 @@ def find_closest_point(current_point, points, used_indices, resolution):
 
 
 # geting 1000 points from a tck for a specific time and slice k
-def get_points_from_tck(tck, t, k):
-    tck_tk = (tck[0][t][k], tck[1][t][k], tck[2][t][k])
-    points = splev(np.linspace(0, 1, 100), tck_tk)
+def get_points_from_tck(tck, k):
+    tck_k = tck[k]
+    points = splev(np.linspace(0, 1, 100), tck_k)
     return points
 
 
@@ -301,12 +301,12 @@ def plot_spline(ax, tck):
     return ax
 
 
-def plot_shax_with_coords(mask, tck, t, k, resolution, new_plot=False, color="r"):
+def plot_shax_with_coords(mask, tck, k, resolution, new_plot=False, color="r"):
     if new_plot or not hasattr(plot_shax_with_coords, "fig"):
         plot_shax_with_coords.fig, plot_shax_with_coords.ax = plt.subplots()
         plot_shax_with_coords.ax.cla()  # Clear the previous plot if new_plot is True
-    coords = coords_from_img(mask[k, :, :, t], resolution)
-    points = get_points_from_tck(tck, t, k)
+    coords = coords_from_img(mask[k, :, :], resolution)
+    points = get_points_from_tck(tck, k)
     plot_shax_with_coords.ax.plot(points[0], points[1], color + "-")
     plot_shax_with_coords.ax.scatter(coords[:, 0], coords[:, 1], s=1, c=color)
     plt.gca().set_aspect("equal", adjustable="box")
