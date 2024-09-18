@@ -22,39 +22,38 @@ logger = get_logger()
 # Extracting of edges of epi and endo
 # Here we create the edges of each stack if the edges are connected so we are on the last stacks where the there is only epicardium otherwise we have both epi and endo. In this case the samples with more element (lenght) is the outer diameter and thus epicardium
 def get_endo_epi(mask):
-    if len(mask.shape) == 3:
-        mask = np.expand_dims(mask, axis=-1)
-    K, I, _, T_total = mask.shape
+    if len(mask.shape) > 3:
+        logger.error("The mask should be a list (corresponding to longitudinal slices) containting binary images (corresponding to short axis images)")
+    K, I, _ = mask.shape
     kernel = np.ones((3, 3), np.uint8)
-    mask_epi = np.zeros((K, I, I, T_total))
-    mask_endo = np.zeros((K, I, I, T_total))
+    mask_epi = np.zeros((K, I, I))
+    mask_endo = np.zeros((K, I, I))
 
-    for t in range(T_total):
-        for k in range(K):
-            mask_t = mask[k, :, :, t]
-            img = np.uint8(mask_t * 255)
-            img_dilated = binary_dilation(img, structure=kernel).astype(img.dtype)
-            img_edges = img_dilated - img
-            img_edges[img_edges == 2] = 0
-            flag, visited, visited_reversed = is_connected(img_edges)
-            if flag:
-                img_epi = img_edges
-                img_endo = np.zeros((I, I))
+    for k in range(K):
+        mask_k = mask[k, :, :]
+        img = np.uint8(mask_k * 255)
+        img_dilated = binary_dilation(img, structure=kernel).astype(img.dtype)
+        img_edges = img_dilated - img
+        img_edges[img_edges == 2] = 0
+        flag, visited, visited_reversed = is_connected(img_edges)
+        if flag:
+            img_epi = img_edges
+            img_endo = np.zeros((I, I))
+        else:
+            img_epi = np.zeros((I, I), dtype=np.uint8)
+            img_endo = np.zeros((I, I), dtype=np.uint8)
+            if len(visited) > len(visited_reversed):
+                for x, y in visited:
+                    img_epi[x, y] = 1
+                for x, y in visited_reversed:
+                    img_endo[x, y] = 1
             else:
-                img_epi = np.zeros((I, I), dtype=np.uint8)
-                img_endo = np.zeros((I, I), dtype=np.uint8)
-                if len(visited) > len(visited_reversed):
-                    for x, y in visited:
-                        img_epi[x, y] = 1
-                    for x, y in visited_reversed:
-                        img_endo[x, y] = 1
-                else:
-                    for x, y in visited_reversed:
-                        img_epi[x, y] = 1
-                    for x, y in visited:
-                        img_endo[x, y] = 1
-            mask_epi[k, :, :, t] = img_epi
-            mask_endo[k, :, :, t] = img_endo
+                for x, y in visited_reversed:
+                    img_epi[x, y] = 1
+                for x, y in visited:
+                    img_endo[x, y] = 1
+        mask_epi[k, :, :] = img_epi
+        mask_endo[k, :, :] = img_endo
     return mask_epi, mask_endo
 
 
