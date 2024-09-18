@@ -100,16 +100,14 @@ def get_shax_from_coords(coords, resolution, slice_thickness, smooth_level):
 
 # % Creating LAX BSplines from SHAX
 def get_sample_points_from_shax(tck_shax, n_points):
-    T_total = len(tck_shax[0])
-    sample_points = [[] for _ in range(T_total)]
-    for t in tqdm(range(T_total), desc="Creating LAX Sample points", ncols=100):
-        K = len(tck_shax[0][t])
-        # We find the center based on the SHAX of the last slice
-        shax_points = get_points_from_tck(tck_shax, t, -1)
-        LV_center = np.mean(shax_points[:2], axis=1)
-        for k in range(K):
-            points = get_n_points_from_shax(n_points, tck_shax, t, k, LV_center)
-            sample_points[t].append(points)
+    sample_points = []
+    K = len(tck_shax)
+    shax_points = get_points_from_tck(tck_shax, -1)
+    # We find the center based on the SHAX of the last slice
+    LV_center = np.mean(shax_points[:2], axis=1)
+    for k in tqdm(range(K), desc="Creating LAX Sample points", ncols=100):
+        points = get_n_points_from_shax(n_points, tck_shax, k, LV_center)
+        sample_points.append(points)
     return sample_points
 
 
