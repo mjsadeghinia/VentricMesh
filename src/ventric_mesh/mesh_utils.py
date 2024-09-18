@@ -61,44 +61,53 @@ def get_endo_epi(mask):
 # ----------------------------------------------------------------
 # ------------ Creating BSplines and Smooth Contours -------------
 # ----------------------------------------------------------------
-
+def get_coords_from_mask(mask, resolution):
+    if len(mask.shape) == 3:
+        mask = np.expand_dims(mask, axis=-1)
+    K, I, _, T_total = mask.shape
+    coords = [[] for _ in range(T_total)]
+    for t in range(T_total):
+        for k in range(K):
+            img = mask[k, :, :, t]
+            coords_tk = coords_from_img(img, resolution)
+            if len(coords_tk)>0:
+                coords[t].append(coords_tk)
+    return coords
 
 # % Getting shax bsplines from epi and endo masks
-def get_shax_from_mask(mask, resolution, slice_thickness, smooth_level):
+def get_shax_from_coords(coords, resolution, slice_thickness, smooth_level):
     # The smooth_level is based on the area enclosed by the epi/endo points and it should.
     warnings.filterwarnings(
         "ignore", category=RuntimeWarning, module="scipy.interpolate"
     )
-    if len(mask.shape) == 3:
-        mask = np.expand_dims(mask, axis=-1)
-    K, I, _, T_total = mask.shape
-    t_nurbs = [[] for _ in range(mask.shape[3])]
-    c_nurbs = [[] for _ in range(mask.shape[3])]
-    k_nurbs = [[] for _ in range(mask.shape[3])]
-
+    if not isinstance(coords[0],list):
+        coords = np.expand_dims(coords, axis=0)
+    T_total = len(coords)
+    K = len(coords[0])
+    t_nurbs = [[] for _ in range(T_total)]
+    c_nurbs = [[] for _ in range(T_total)]
+    k_nurbs = [[] for _ in range(T_total)]
     for t in tqdm(range(T_total), desc="Creating SHAX Curves", ncols=100):
         for k in range(K):
-            img = mask[k, :, :, t]
-            coords = coords_from_img(img, resolution)
-            # the if conditions is for the endo as there are not alway K
-            if len(coords) > 0:
-                coords_sorted = sorting_coords(coords, resolution)
-                # Adding the first point to the end to make it periodic
-                np.vstack((coords_sorted, coords_sorted[0, :]))
-                # spline fitting
-                z = -(k) * slice_thickness
-                z_list = np.ones(coords_sorted.shape[0]) * z
-                area = calculate_area_points(coords_sorted)
-                tck_tk, u_epi = splprep(
-                    [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
-                    s=smooth_level * area,
-                    per=True,
-                    k=3,
-                )
-                # spline evaluations
-                t_nurbs[t].append(tck_tk[0])  # Knot vector
-                c_nurbs[t].append(tck_tk[1])  # Coefficients
-                k_nurbs[t].append(tck_tk[2])  # Degree
+            coord_tk = coords[t][k]
+            coords_sorted = sorting_coords(coord_tk, resolution)
+            # Adding the first point to the end to make it periodic
+            coords_sorted = np.vstack((coords_sorted, coords_sorted[0, :]))
+
+            # spline fitting
+            z = -(k) * slice_thickness
+            z_list = np.ones(coords_sorted.shape[0]) * z
+            area = calculate_area_points(coords_sorted)
+            tck_tk, u_epi = splprep(
+                [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
+                s=smooth_level * area,
+                per=True,
+                k=3,
+            )
+            # spline evaluations
+            t_nurbs[t].append(tck_tk[0])  # Knot vector
+            c_nurbs[t].append(tck_tk[1])  # Coefficients
+            k_nurbs[t].append(tck_tk[2])  # Degree
     tck = (t_nurbs, c_nurbs, k_nurbs)
     return tck
 
@@ -460,7 +469,7 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshol
         iter += 1
         apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
     if iter==5:    
-        logger.warning(f'Number of apex shax may not be sufficient, it is advised to decrease the seed_num_threshold')
+        logger.warning('Number of apex shax may not be sufficient, it is advised to decrease the seed_num_threshold')
 
     m = len(apex_seed_num) - 1
     old_shax_points = find_midpoints(last_slice_points, center, m)
@@ -840,9 +849,13 @@ def NodeGenerator(
     smooth_lax_endo=0.8,
 ):
     mask_epi, mask_endo = get_endo_epi(mask)
-    tck_epi = get_shax_from_mask(mask_epi, resolution, slice_thickness, smooth_shax_epi)
-    tck_endo = get_shax_from_mask(
-        mask_endo, resolution, slice_thickness, smooth_shax_endo
+    coords_epi = get_coords_from_mask(mask_epi, resolution)
+    coords_endo = get_coords_from_mask(mask_endo, resolution)
+    tck_epi = get_shax_from_coords(
+            coords_epi, resolution, slice_thickness, smooth_shax_epi
+        )
+    tck_endo = get_shax_from_coords(
+        coords_endo, resolution, slice_thickness, smooth_shax_endo
     )
     sample_points_epi = get_sample_points_from_shax(tck_epi, n_points_lax)
     sample_points_endo = get_sample_points_from_shax(tck_endo, n_points_lax)
