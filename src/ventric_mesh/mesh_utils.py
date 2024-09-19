@@ -254,11 +254,11 @@ def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0):
 # ----------------------------------------------------------------
 
 
-def equally_spaced_points_on_spline(tck_tk, N):
+def equally_spaced_points_on_spline(tck_k, N):
     # Evaluate the spline over a fine grid
     n_points = 1000
     t = np.linspace(0, 1, n_points)
-    x, y, z = splev(t, tck_tk)
+    x, y, z = splev(t, tck_k)
     points = np.vstack((x, y, z)).T
     # Compute the cumulative arc length at each point
     diff_points = np.diff(points, axis=0)
@@ -275,7 +275,7 @@ def equally_spaced_points_on_spline(tck_tk, N):
         target_length = i * segment_length
         idx = np.where(cumulative_lengths >= target_length)[0][0]
         equally_spaced_t_values[i] = t[idx]
-    x, y, z = splev(equally_spaced_t_values, tck_tk)
+    x, y, z = splev(equally_spaced_t_values, tck_k)
     points_equal_spaced = np.vstack((x, y, z)).T
     return points_equal_spaced
 
@@ -358,20 +358,17 @@ def get_apex_shax_points_from_lax(apex_tck_lax, z):
 
 
 def create_apex_shax(apex_shax_points, z_sections):
-    t_nurbs, c_nurbs, k_nurbs = [], [], []
+    tck_apex_shax = []
     for i, z in enumerate(z_sections):
         shax_points = apex_shax_points[i]
         shax_points[:,2] = z
-        tck_epi_tk, u_epi = splprep(
+        tck_epi_k, u_epi = splprep(
             [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
             s=0,
             per=True,
             k=3,
         )
-        t_nurbs.append(tck_epi_tk[0])  # Knot vector
-        c_nurbs.append(tck_epi_tk[1])  # Coefficients
-        k_nurbs.append(tck_epi_tk[2])  # Degree
-    tck_apex_shax = (t_nurbs, c_nurbs, k_nurbs)
+        tck_apex_shax.append(tck_epi_k)
     return tck_apex_shax
 
 
@@ -413,13 +410,13 @@ def find_midpoints(last_slice_points, center, m):
     return mid_points
 
 
-def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshold):
-    K = len(tck_shax[0][t])
-    num_points_last_slice = point_cloud[t][k - 1].shape[0]
-    last_slice_points = point_cloud[t][k - 1]
+def create_apex_point_cloud(point_cloud, k, tck_shax, apex, seed_num_threshold):
+    K = len(tck_shax)
+    num_points_last_slice = point_cloud[k - 1].shape[0]
+    last_slice_points = point_cloud[k - 1]
     center = np.mean(last_slice_points, axis=0)
-    center[2] = apex[t][2]
-    check_apex_shift(apex[t], center)
+    center[2] = apex[2]
+    check_apex_shift(apex, center)
     # if the area is too big it should be scale so more intermediatry slices are considerd
     num_slices = 2
     apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
@@ -440,16 +437,12 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshol
     tck_apex_shax = create_apex_shax(old_shax_points[1:], z_sections)
 
     for n, apex_seed_num_k in enumerate(apex_seed_num[1:]):
-        tck_apex_shax_k = (
-            tck_apex_shax[0][n],
-            tck_apex_shax[1][n],
-            tck_apex_shax[2][n],
-        )
+        tck_apex_shax_k = tck_apex_shax[n]
         points = equally_spaced_points_on_spline(tck_apex_shax_k, int(apex_seed_num_k))
         points[:, 2] = np.mean(points[:, 2])
-        point_cloud[t].append(points)
+        point_cloud.append(points)
 
-    point_cloud[t].append(center)
+    point_cloud.append(center)
 
     return point_cloud
 
@@ -513,32 +506,29 @@ def third_order_interpolate(start_point, end_point, num_point):
     return z_sections
 
 def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
-    T = len(tck_shax[0])
-    point_cloud = [[] for t in range(T)]
-    apex_k = np.zeros(T)
-    for t in tqdm(range(T), desc="Creating pointcloud for mesh generation", ncols=100):
-        K = len(tck_shax[0][t])
-        area_shax = np.zeros(K)
-        for k in range(K):
-            tck_tk = (tck_shax[0][t][k], tck_shax[1][t][k], tck_shax[2][t][k])
-            area_shax[k] = calculate_area_b_spline(tck_tk)
-            seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
-            if seed_num_k < seed_num_threshold:
-                apex_k[t] = k if apex_k[t] == 0 else apex_k[t]
-                point_cloud = create_apex_point_cloud(
-                    point_cloud, t, k, tck_shax, apex, seed_num_threshold
-                )
-                break
+    point_cloud = []
+    K = len(tck_shax)
+    area_shax = np.zeros(K)
+    for k in tqdm(range(K), desc="Creating pointcloud for mesh generation", ncols=100):
+        tck_k = tck_shax[k]
+        area_shax[k] = calculate_area_b_spline(tck_k)
+        seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
+        if seed_num_k < seed_num_threshold:
+            # apex = k if apex == 0 else apex
+            point_cloud = create_apex_point_cloud(
+                point_cloud, k, tck_shax, apex, seed_num_threshold
+            )
+            break
+        else:
+            points = equally_spaced_points_on_spline(tck_k, seed_num_k)
+            # ensuring that base is always at z=0
+            if k == 0:
+                points[:, 2] = 0
             else:
-                points = equally_spaced_points_on_spline(tck_tk, seed_num_k)
-                # ensuring that base is always at z=0
-                if k == 0:
-                    points[:, 2] = 0
-                else:
-                    points[:, 2] = np.mean(points[:, 2])
-                point_cloud[t].append(points)
+                points[:, 2] = np.mean(points[:, 2])
+            point_cloud.append(points)
 
-    return point_cloud, apex_k
+    return point_cloud, apex
 
 
 # ----------------------------------------------------------------
