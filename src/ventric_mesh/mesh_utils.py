@@ -188,73 +188,64 @@ def get_lax_from_laxpoints(LAX_points, smooth_level):
     return tck
 
 
-def get_shax_points_from_lax(tck_lax, t, z_section):
-    n_curves = len(tck_lax[0][t])
-    shax_points = np.zeros((n_curves * 2, 3))
-    for n in range(n_curves):
-        tck_lax_tn = (tck_lax[0][t][n], tck_lax[1][t][n], tck_lax[2][t][n])
-        points = splev(np.linspace(0, 1, 10000), tck_lax_tn)
+def get_shax_points_from_lax(tck_lax, z_section):
+    n_LAX = len(tck_lax)
+    shax_points = np.zeros((n_LAX * 2, 3))
+    for n in range(n_LAX):
+        tck_lax_n = tck_lax[n]
+        points = splev(np.linspace(0, 1, 10000), tck_lax_n)
         points = np.array(points)
         apex_ind = np.argmin(points[2, :])
         idx = (np.abs(points[2, :apex_ind] - z_section)).argmin()
         shax_points[n, :] = points[:, idx]
         idx = (np.abs(points[2, apex_ind:] - z_section)).argmin()
-        shax_points[n + n_curves, :] = points[:, idx + apex_ind]
+        shax_points[n + n_LAX, :] = points[:, idx + apex_ind]
     return shax_points
 
 
-def get_shax_area_from_lax(tck_lax, t, apex, num_sections):
-    n_LAX = len(tck_lax[0][t][0])
+def get_shax_area_from_lax(tck_lax, apex, num_sections):
+    n_LAX = len(tck_lax)
     shax_points = np.zeros((n_LAX * 2, 3))
-    z_list = np.linspace(0, apex[t, 2], num_sections)
+    z_list = np.linspace(0, apex[2], num_sections)
     area_shax = np.zeros(num_sections)
     # radii_shax=np.zeros(num_sections)
     for k in range(len(z_list)):
-        shax_points = get_shax_points_from_lax(tck_lax, t, z_list[k])
-        tck_tk, u_epi = splprep(
+        shax_points = get_shax_points_from_lax(tck_lax, z_list[k])
+        tck_k, u_epi = splprep(
             [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
             s=0,
             per=True,
             k=3,
         )
-        area_shax[k] = calculate_area_b_spline(tck_tk)
+        area_shax[k] = calculate_area_b_spline(tck_k)
     return area_shax
 
 
-def create_z_sections_for_shax(tck_lax, apex, t, num_sections):
+def create_z_sections_for_shax(tck_lax, apex, num_sections):
     # The area is cacluated for num_sections-1 as the base will be added at the end
-    area = get_shax_area_from_lax(tck_lax, t, apex, num_sections - 1)
+    area = get_shax_area_from_lax(tck_lax, apex, num_sections - 1)
     area_norm = area / sum(area)
-    z_sections = np.cumsum(area_norm * apex[t, 2])
+    z_sections = np.cumsum(area_norm * apex[2])
     z_sections = np.hstack([0, z_sections])
     return z_sections
 
 
 def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0):
     T_total = len(tck_lax[0])
-    # n_curves = len(tck_lax[0][0])
-    t_nurbs = [[] for _ in range(T_total)]
-    c_nurbs = [[] for _ in range(T_total)]
-    k_nurbs = [[] for _ in range(T_total)]
-    for t in tqdm(
-        range(T_total), desc="SHAX Allignment with respect to Generated LAX", ncols=100
-    ):
-        if z_sections_flag == 1:
-            z_sections = create_z_sections_for_shax(tck_lax, apex, t, num_sections)
-        elif z_sections_flag == 0:
-            z_sections = np.linspace(0, apex[t, 2], num_sections)
-        for z in z_sections:
-            shax_points = get_shax_points_from_lax(tck_lax, t, z)
-            tck_epi_tk, u_epi = splprep(
-                [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
-                s=0,
-                per=True,
-                k=3,
-            )
-            t_nurbs[t].append(tck_epi_tk[0])  # Knot vector
-            c_nurbs[t].append(tck_epi_tk[1])  # Coefficients
-            k_nurbs[t].append(tck_epi_tk[2])  # Degree
-    tck_shax = (t_nurbs, c_nurbs, k_nurbs)
+    tck_shax = []
+    if z_sections_flag == 1:
+        z_sections = create_z_sections_for_shax(tck_lax, apex, num_sections)
+    elif z_sections_flag == 0:
+        z_sections = np.linspace(0, apex[2], num_sections)
+    for z in z_sections:
+        shax_points = get_shax_points_from_lax(tck_lax, z)
+        tck_shax_k, u = splprep(
+            [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
+            s=0,
+            per=True,
+            k=3,
+        )
+        tck_shax.append(tck_shax_k)
     return tck_shax
 
 

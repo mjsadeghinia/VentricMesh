@@ -391,16 +391,12 @@ def plot_3d_LAX(ax, n_list, tck_epi, tck_endo=None):
 
 
 def plotly_3d_contours(
-    fig, t, tck_shax_epi, tck_lax_epi, tck_shax_endo=None, tck_lax_endo=None
+    fig, tck_shax_epi, tck_lax_epi, tck_shax_endo=None, tck_lax_endo=None
 ):
-    k_shax = len(tck_shax_epi[0][0])
+    k_shax = len(tck_shax_epi)
     for k in range(k_shax):
-        tck_epi_tk = (
-            tck_shax_epi[0][t][k],
-            tck_shax_epi[1][t][k],
-            tck_shax_epi[2][t][k],
-        )
-        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_tk)
+        tck_epi_k = tck_shax_epi[k]
+        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_k)
         fig.add_trace(
             go.Scatter3d(
                 x=new_points_epi[0],
@@ -412,13 +408,9 @@ def plotly_3d_contours(
                 line=dict(color="red"),
             )
         )
-        if tck_shax_endo and len(tck_shax_endo[0][t]) > k:
-            tck_endo_tk = (
-                tck_shax_endo[0][t][k],
-                tck_shax_endo[1][t][k],
-                tck_shax_endo[2][t][k],
-            )
-            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_tk)
+        if tck_shax_endo and len(tck_shax_endo) > k:
+            tck_endo_k = tck_shax_endo[k]
+            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_k)
             fig.add_trace(
                 go.Scatter3d(
                     x=new_points_endo[0],
@@ -432,14 +424,10 @@ def plotly_3d_contours(
             )
 
     # Plot LAX splines
-    n_lax = len(tck_lax_epi[0][0])
+    n_lax = len(tck_lax_epi)
     for n in range(n_lax):
-        lax_tck_epi_tk = (
-            tck_lax_epi[0][t][n],
-            tck_lax_epi[1][t][n],
-            tck_lax_epi[2][t][n],
-        )
-        lax_new_points_epi = splev(np.linspace(0, 1, 1000), lax_tck_epi_tk)
+        lax_tck_epi_n = tck_lax_epi[n]
+        lax_new_points_epi = splev(np.linspace(0, 1, 1000), lax_tck_epi_n)
         fig.add_trace(
             go.Scatter3d(
                 x=lax_new_points_epi[0],
@@ -452,12 +440,8 @@ def plotly_3d_contours(
             )
         )
         if tck_lax_endo:
-            lax_tck_endo_tk = (
-                tck_lax_endo[0][t][n],
-                tck_lax_endo[1][t][n],
-                tck_lax_endo[2][t][n],
-            )
-            lax_new_points_endo = splev(np.linspace(0, 1, 1000), lax_tck_endo_tk)
+            lax_tck_endo_n = tck_lax_endo[n]
+            lax_new_points_endo = splev(np.linspace(0, 1, 1000), lax_tck_endo_n)
             fig.add_trace(
                 go.Scatter3d(
                     x=lax_new_points_endo[0],
