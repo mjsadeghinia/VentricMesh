@@ -384,11 +384,11 @@ def pop_too_close_shax(old_shax_points):
     return old_shax_points
 
 
-def get_num_apex_slices(point_cloud, t, k, apex, seed_num_threshold):
-    num_points_last_slice = point_cloud[t][k - 1].shape[0]
+def get_num_apex_slices(point_cloud, k, apex, seed_num_threshold):
+    num_points_last_slice = point_cloud[k - 1].shape[0]
     num_apex_slices_from_points = int(num_points_last_slice / seed_num_threshold) + 1
-    slice_thickness = point_cloud[t][k - 2][0, 2] - point_cloud[t][k - 1][0, 2]
-    apex_thickness = point_cloud[t][k - 1][0, 2] - apex[t][2]
+    slice_thickness = point_cloud[k - 2][0, 2] - point_cloud[k - 1][0, 2]
+    apex_thickness = point_cloud[k - 1][0, 2] - apex[2]
     num_apex_slices_from_thickness = int(apex_thickness / slice_thickness)
     num_apex_slices = max(num_apex_slices_from_points, num_apex_slices_from_thickness)
     return num_apex_slices
@@ -507,6 +507,7 @@ def third_order_interpolate(start_point, end_point, num_point):
 
 def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
     point_cloud = []
+    k_apex = 0
     K = len(tck_shax)
     area_shax = np.zeros(K)
     for k in tqdm(range(K), desc="Creating pointcloud for mesh generation", ncols=100):
@@ -514,7 +515,7 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
         area_shax[k] = calculate_area_b_spline(tck_k)
         seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
         if seed_num_k < seed_num_threshold:
-            # apex = k if apex == 0 else apex
+            k_apex = k if k_apex == 0 else k_apex
             point_cloud = create_apex_point_cloud(
                 point_cloud, k, tck_shax, apex, seed_num_threshold
             )
@@ -528,7 +529,7 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
                 points[:, 2] = np.mean(points[:, 2])
             point_cloud.append(points)
 
-    return point_cloud, apex
+    return point_cloud, k_apex
 
 
 # ----------------------------------------------------------------
@@ -648,7 +649,7 @@ def create_slice_mesh(slice1, slice2, scale):
     return faces
 
 
-def create_mesh_slice_by_slice(point_cloud, scale, apex_k):
+def create_mesh_slice_by_slice(point_cloud, scale, k_apex):
     vertices = []
     faces = []
     points_cloud_aligned = align_points(point_cloud)
@@ -656,7 +657,7 @@ def create_mesh_slice_by_slice(point_cloud, scale, apex_k):
     for k in range(num_shax):
         slice1 = np.array(points_cloud_aligned[k])
         slice2 = np.array(points_cloud_aligned[k + 1])
-        if k>apex_k:
+        if k>k_apex:
             scale = 2
         slice_faces = create_slice_mesh(slice1, slice2, scale)
         faces_offset = sum(map(len, vertices))
@@ -697,30 +698,28 @@ def interpolate_splines(tck_inner, tck_outer, num_mid_layers):
 
 
 def create_base_point_cloud(points_endo, points_epi, num_mid_layers=1):
-    T_total = len(points_endo)
-    base_points_cloud = [[] for _ in range(T_total)]
-    for t in range(T_total):
-        base_endo = points_endo[t][0]
-        base_epi = points_epi[t][0]
-        # Creating 2D splines for endo and epi (using only x and y coordinates)
-        tck_endo_3d, _ = splprep(
-            [base_endo[:, 0], base_endo[:, 1], base_endo[:, 2]], s=0, per=True, k=3
+    base_points_cloud = []
+    base_endo = points_endo[0]
+    base_epi = points_epi[0]
+    # Creating 2D splines for endo and epi (using only x and y coordinates)
+    tck_endo_3d, _ = splprep(
+        [base_endo[:, 0], base_endo[:, 1], base_endo[:, 2]], s=0, per=True, k=3
+    )
+    tck_epi_3d, _ = splprep(
+        [base_epi[:, 0], base_epi[:, 1], base_epi[:, 2]], s=0, per=True, k=3
+    )
+    tck_layers = interpolate_splines(tck_endo_3d, tck_epi_3d, num_mid_layers)
+    num_points_endo = base_endo.shape[0]
+    num_points_epi = base_epi.shape[0]
+    num_points_layers = np.linspace(
+        num_points_epi, num_points_endo, num_mid_layers + 2, dtype=int
+    )
+    for n in range(len(num_points_layers)):
+        points = equally_spaced_points_on_spline(
+            tck_layers[n], num_points_layers[n]
         )
-        tck_epi_3d, _ = splprep(
-            [base_epi[:, 0], base_epi[:, 1], base_epi[:, 2]], s=0, per=True, k=3
-        )
-        tck_layers = interpolate_splines(tck_endo_3d, tck_epi_3d, num_mid_layers)
-        num_points_endo = base_endo.shape[0]
-        num_points_epi = base_epi.shape[0]
-        num_points_layers = np.linspace(
-            num_points_epi, num_points_endo, num_mid_layers + 2, dtype=int
-        )
-        for n in range(len(num_points_layers)):
-            points = equally_spaced_points_on_spline(
-                tck_layers[n], num_points_layers[n]
-            )
-            points[:, 2] = 0
-            base_points_cloud[t].append(points)
+        points[:, 2] = 0
+        base_points_cloud.append(points)
     return base_points_cloud
 
 
@@ -824,33 +823,32 @@ def NodeGenerator(
     tck_shax_endo = get_shax_from_lax(
         tck_lax_endo, apex_endo, num_z_sections_endo, z_sections_flag_endo
     )
-    points_cloud_endo, apex_k_endo = create_point_cloud(
+    points_cloud_endo, k_apex_endo = create_point_cloud(
         tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=8
     )
-    points_cloud_epi, apex_k_epi = create_point_cloud(
+    points_cloud_epi, k_apex_epi = create_point_cloud(
         tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=8
     )
-    return points_cloud_epi, points_cloud_endo, apex_k_epi, apex_k_endo
+    return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo
 
 
 def VentricMesh(
     points_cloud_epi,
     points_cloud_endo,
-    t_mesh,
     num_mid_layers_base,
-    apex_k_epi,
-    apex_k_endo,
+    k_apex_epi,
+    k_apex_endo,
     scale_for_delauny=1.2,
     save_flag=True,
     filename_suffix="",
     result_folder="",
 ):
-    vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi[t_mesh], scale=scale_for_delauny, apex_k=apex_k_epi[t_mesh])
-    vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo[t_mesh], scale=scale_for_delauny, apex_k=apex_k_endo[t_mesh])
+    vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi, scale=scale_for_delauny, k_apex=k_apex_epi)
+    vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo, scale=scale_for_delauny, k_apex=k_apex_endo)
     points_cloud_base = create_base_point_cloud(
         points_cloud_endo, points_cloud_epi, num_mid_layers_base
     )
-    vertices_base, faces_base = create_base_mesh(points_cloud_base[t_mesh])
+    vertices_base, faces_base = create_base_mesh(points_cloud_base)
     mesh_merged = merge_meshes(
         vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo
     )
