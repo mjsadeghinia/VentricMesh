@@ -130,9 +130,9 @@ def find_closest_point(current_point, points, used_indices, resolution):
 
 
 # geting 1000 points from a tck for a specific time and slice k
-def get_points_from_tck(tck, t, k):
-    tck_tk = (tck[0][t][k], tck[1][t][k], tck[2][t][k])
-    points = splev(np.linspace(0, 1, 100), tck_tk)
+def get_points_from_tck(tck, k):
+    tck_k = tck[k]
+    points = splev(np.linspace(0, 1, 100), tck_k)
     return points
 
 
@@ -216,7 +216,7 @@ def sample_bspline_from_angles(tck, n_points, side="upper", center=None):
     return points
 
 
-def get_n_points_from_shax(n_points, tck, t, k, LV_center):
+def get_n_points_from_shax(n_points, tck, k, LV_center):
     """
     Divide the shax into several slices with equal angles to get n_points, which should be an even number
 
@@ -226,12 +226,12 @@ def get_n_points_from_shax(n_points, tck, t, k, LV_center):
     :param LV_center:       The coords of the center
     :return:                Coordinates of the points.
     """
-    tck_tk = (tck[0][t][k], tck[1][t][k], tck[2][t][k])
+    tck_k = tck[k]
     points_upper = sample_bspline_from_angles(
-        tck_tk, int(n_points / 2) + 1, side="upper", center=LV_center
+        tck_k, int(n_points / 2) + 1, side="upper", center=LV_center
     )
     points_lower = sample_bspline_from_angles(
-        tck_tk, int(n_points / 2) + 1, side="lower", center=LV_center
+        tck_k, int(n_points / 2) + 1, side="lower", center=LV_center
     )
     points = np.vstack([points_upper[:-1], points_lower[:-1]])
     return points
@@ -301,12 +301,12 @@ def plot_spline(ax, tck):
     return ax
 
 
-def plot_shax_with_coords(mask, tck, t, k, resolution, new_plot=False, color="r"):
+def plot_shax_with_coords(mask, tck, k, resolution, new_plot=False, color="r"):
     if new_plot or not hasattr(plot_shax_with_coords, "fig"):
         plot_shax_with_coords.fig, plot_shax_with_coords.ax = plt.subplots()
         plot_shax_with_coords.ax.cla()  # Clear the previous plot if new_plot is True
-    coords = coords_from_img(mask[k, :, :, t], resolution)
-    points = get_points_from_tck(tck, t, k)
+    coords = coords_from_img(mask[k, :, :], resolution)
+    points = get_points_from_tck(tck, k)
     plot_shax_with_coords.ax.plot(points[0], points[1], color + "-")
     plot_shax_with_coords.ax.scatter(coords[:, 0], coords[:, 1], s=1, c=color)
     plt.gca().set_aspect("equal", adjustable="box")
@@ -357,7 +357,7 @@ def plot_3d_SHAX(t, slice_thickness, tck_epi, tck_endo=None):
     return ax
 
 
-def plot_3d_LAX(ax, t, n_list, tck_epi, tck_endo=None):
+def plot_3d_LAX(ax, n_list, tck_epi, tck_endo=None):
     """
     Plots the 3D LAX spline shapes for a given t, where n corresponds the list of curve numbers.
     :param k:           Index for the specific set of data
@@ -368,15 +368,15 @@ def plot_3d_LAX(ax, t, n_list, tck_epi, tck_endo=None):
 
     for n in n_list:
         # Plot epicardial spline
-        tck_epi_tk = (tck_epi[0][t][n], tck_epi[1][t][n], tck_epi[2][t][n])
-        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_tk)
+        tck_epi_n = tck_epi[n]
+        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_n)
         ax.plot(
             new_points_epi[0], new_points_epi[1], new_points_epi[2], zdir="z", color="r"
         )
         # Plot endocardial spline if data is available
         if tck_endo:
-            tck_endo_tk = (tck_endo[0][t][n], tck_endo[1][t][n], tck_endo[2][t][n])
-            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_tk)
+            tck_endo_n = tck_endo[n]
+            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_n)
             ax.plot(
                 new_points_endo[0],
                 new_points_endo[1],
@@ -385,22 +385,18 @@ def plot_3d_LAX(ax, t, n_list, tck_epi, tck_endo=None):
                 color="b",
             )
 
-    ax.set_title(f"3D Spline Shapes (LAX) for t={t}")
+    ax.set_title(f"3D Spline Shapes (LAX)")
 
     return ax
 
 
 def plotly_3d_contours(
-    fig, t, tck_shax_epi, tck_lax_epi, tck_shax_endo=None, tck_lax_endo=None
+    fig, tck_shax_epi, tck_lax_epi, tck_shax_endo=None, tck_lax_endo=None
 ):
-    k_shax = len(tck_shax_epi[0][0])
+    k_shax = len(tck_shax_epi)
     for k in range(k_shax):
-        tck_epi_tk = (
-            tck_shax_epi[0][t][k],
-            tck_shax_epi[1][t][k],
-            tck_shax_epi[2][t][k],
-        )
-        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_tk)
+        tck_epi_k = tck_shax_epi[k]
+        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_k)
         fig.add_trace(
             go.Scatter3d(
                 x=new_points_epi[0],
@@ -412,13 +408,9 @@ def plotly_3d_contours(
                 line=dict(color="red"),
             )
         )
-        if tck_shax_endo and len(tck_shax_endo[0][t]) > k:
-            tck_endo_tk = (
-                tck_shax_endo[0][t][k],
-                tck_shax_endo[1][t][k],
-                tck_shax_endo[2][t][k],
-            )
-            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_tk)
+        if tck_shax_endo and len(tck_shax_endo) > k:
+            tck_endo_k = tck_shax_endo[k]
+            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_k)
             fig.add_trace(
                 go.Scatter3d(
                     x=new_points_endo[0],
@@ -432,14 +424,10 @@ def plotly_3d_contours(
             )
 
     # Plot LAX splines
-    n_lax = len(tck_lax_epi[0][0])
+    n_lax = len(tck_lax_epi)
     for n in range(n_lax):
-        lax_tck_epi_tk = (
-            tck_lax_epi[0][t][n],
-            tck_lax_epi[1][t][n],
-            tck_lax_epi[2][t][n],
-        )
-        lax_new_points_epi = splev(np.linspace(0, 1, 1000), lax_tck_epi_tk)
+        lax_tck_epi_n = tck_lax_epi[n]
+        lax_new_points_epi = splev(np.linspace(0, 1, 1000), lax_tck_epi_n)
         fig.add_trace(
             go.Scatter3d(
                 x=lax_new_points_epi[0],
@@ -452,12 +440,8 @@ def plotly_3d_contours(
             )
         )
         if tck_lax_endo:
-            lax_tck_endo_tk = (
-                tck_lax_endo[0][t][n],
-                tck_lax_endo[1][t][n],
-                tck_lax_endo[2][t][n],
-            )
-            lax_new_points_endo = splev(np.linspace(0, 1, 1000), lax_tck_endo_tk)
+            lax_tck_endo_n = tck_lax_endo[n]
+            lax_new_points_endo = splev(np.linspace(0, 1, 1000), lax_tck_endo_n)
             fig.add_trace(
                 go.Scatter3d(
                     x=lax_new_points_endo[0],
