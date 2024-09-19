@@ -357,7 +357,7 @@ def plot_3d_SHAX(t, slice_thickness, tck_epi, tck_endo=None):
     return ax
 
 
-def plot_3d_LAX(ax, t, n_list, tck_epi, tck_endo=None):
+def plot_3d_LAX(ax, n_list, tck_epi, tck_endo=None):
     """
     Plots the 3D LAX spline shapes for a given t, where n corresponds the list of curve numbers.
     :param k:           Index for the specific set of data
@@ -368,15 +368,15 @@ def plot_3d_LAX(ax, t, n_list, tck_epi, tck_endo=None):
 
     for n in n_list:
         # Plot epicardial spline
-        tck_epi_tk = (tck_epi[0][t][n], tck_epi[1][t][n], tck_epi[2][t][n])
-        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_tk)
+        tck_epi_n = tck_epi[n]
+        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_n)
         ax.plot(
             new_points_epi[0], new_points_epi[1], new_points_epi[2], zdir="z", color="r"
         )
         # Plot endocardial spline if data is available
         if tck_endo:
-            tck_endo_tk = (tck_endo[0][t][n], tck_endo[1][t][n], tck_endo[2][t][n])
-            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_tk)
+            tck_endo_n = tck_endo[n]
+            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_n)
             ax.plot(
                 new_points_endo[0],
                 new_points_endo[1],
@@ -385,7 +385,7 @@ def plot_3d_LAX(ax, t, n_list, tck_epi, tck_endo=None):
                 color="b",
             )
 
-    ax.set_title(f"3D Spline Shapes (LAX) for t={t}")
+    ax.set_title(f"3D Spline Shapes (LAX)")
 
     return ax
 

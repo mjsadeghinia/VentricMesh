@@ -166,33 +166,25 @@ def get_weights_for_lax(K, weight_factor):
 
 
 def get_lax_from_laxpoints(LAX_points, smooth_level):
-    T_total = len(LAX_points)
-    n_curves = len(LAX_points[0])
-    t_nurbs = [[] for _ in range(T_total)]
-    c_nurbs = [[] for _ in range(T_total)]
-    k_nurbs = [[] for _ in range(T_total)]
-    for t in range(T_total):
-        for n in range(n_curves):
-            K = int((len(LAX_points[t][n]) - 1) / 2)
-            # We use weights to ensure that all LAX pass through base and apex
-            W_vector = get_weights_for_lax(K, 1000)
-            # spline fitting
-            tck_tk, u_epi = splprep(
-                [
-                    LAX_points[t][n][:, 0],
-                    LAX_points[t][n][:, 1],
-                    LAX_points[t][n][:, 2],
-                ],
-                w=W_vector,
-                s=smooth_level,
-                per=False,
-                k=3,
-            )
-            # spline evaluations
-            t_nurbs[t].append(tck_tk[0])  # Knot vector
-            c_nurbs[t].append(tck_tk[1])  # Coefficients
-            k_nurbs[t].append(tck_tk[2])  # Degree
-    tck = (t_nurbs, c_nurbs, k_nurbs)
+    n_curves = len(LAX_points)
+    tck = []
+    for n in range(n_curves):
+        K = int((len(LAX_points[n]) - 1) / 2)
+        # We use weights to ensure that all LAX pass through base and apex
+        W_vector = get_weights_for_lax(K, 1000)
+        # spline fitting
+        tck_n, u_epi = splprep(
+            [
+                LAX_points[n][:, 0],
+                LAX_points[n][:, 1],
+                LAX_points[n][:, 2],
+            ],
+            w=W_vector,
+            s=smooth_level,
+            per=False,
+            k=3,
+        )
+        tck.append(tck_n)
     return tck
 
 
