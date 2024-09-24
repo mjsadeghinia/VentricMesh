@@ -1112,7 +1112,9 @@ def VentricMesh_poisson(
     mesh_base=create_mesh(vertices_base,faces_base)
     mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
     mesh_base.save(mesh_base_filename)
-    return
+    output_mesh_filename = result_folder+'Mesh_3D.msh'
+    generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename)
+    return mesh_merged
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
 # ----------------------------------------------------------------
@@ -1241,4 +1243,44 @@ def generate_3d_mesh_from_stl(stl_path, mesh_path, MeshSizeMin=None, MeshSizeMax
     print_mesh_quality_report(10, file_path=stl_path[:-4]+'_report.txt')
     print("===============================")
     print("===============================")
+    gmsh.finalize()
+
+
+def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename):
+    # Initialize Gmsh
+    gmsh.initialize()
+    gmsh.model.add("3D Mesh")
+
+    # Merge the STL files
+    gmsh.merge(mesh_epi_filename)
+    gmsh.merge(mesh_endo_filename)
+    gmsh.merge(mesh_base_filename)
+
+    gmsh.model.mesh.removeDuplicateNodes()
+    gmsh.model.mesh.create_geometry()
+    gmsh.model.mesh.create_topology()
+    surfaces = gmsh.model.getEntities(2)
+    
+    gmsh.model.geo.addSurfaceLoop([s[1] for s in surfaces], 1)
+    vol = gmsh.model.geo.addVolume([1], 1)
+    
+    physical_groups = {
+        "Epi": [1],
+        "Endo": [2],
+        "Base": [3],
+    }
+    for name, tag in physical_groups.items():
+        p = gmsh.model.addPhysicalGroup(2, tag)
+        gmsh.model.setPhysicalName(2, p, name)
+
+    p = gmsh.model.addPhysicalGroup(3, [vol], 1)
+    gmsh.model.setPhysicalName(3, p, "Wall")
+
+    
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(3)
+    # Save the mesh to the specified file
+    gmsh.write(output_mesh_filename)
+
+    # Finalize Gmsh
     gmsh.finalize()
