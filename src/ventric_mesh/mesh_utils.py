@@ -1,5 +1,7 @@
 # %%
 import numpy as np
+import open3d as o3d
+
 from scipy.spatial import Delaunay
 from scipy.interpolate import splev
 from scipy.interpolate import splprep
@@ -775,6 +777,11 @@ def merge_meshes(
     merged_faces = np.vstack((faces_epi, new_faces_endo, new_faces_base))
     mesh_merged = create_mesh(merged_vertices, merged_faces)
     return mesh_merged
+# %%
+# ----------------------------------------------------------------
+# ----- Poisson surface reconstruction and mesh generation  ------
+# ----------------------------------------------------------------
+
 
 
 # %%
@@ -832,7 +839,7 @@ def NodeGenerator(
     return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo
 
 
-def VentricMesh(
+def VentricMesh_delaunay(
     points_cloud_epi,
     points_cloud_endo,
     num_mid_layers_base,

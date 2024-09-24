@@ -97,7 +97,7 @@ def main() -> int:
     t_mesh=int((args.time)*T_end)-1
     
     points_cloud_epi,points_cloud_endo, apex_k_epi, apex_k_endo =NodeGenerator(LVmask,resolution,slice_thickness,seed_num_base_epi,seed_num_base_endo,num_z_sections_epi,num_z_sections_endo)
-    LVmesh=VentricMesh(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base, apex_k_epi, apex_k_endo ,save_flag=True,filename_suffix=filename_suffix,result_folder=output_dir)
+    LVmesh=VentricMesh_delaunay(points_cloud_epi,points_cloud_endo,t_mesh,num_mid_layers_base, apex_k_epi, apex_k_endo ,save_flag=True,filename_suffix=filename_suffix,result_folder=output_dir)
     check_mesh_quality(LVmesh)
     generate_3d_mesh_from_stl(output_dir+'Mesh_'+filename_suffix+'.stl', output_dir+'Mesh_'+filename_suffix+'_3D.msh')
     
