@@ -30,6 +30,7 @@ dependencies = [
     "structlog",
     "gmsh",
     "open3d",
+    "pathlib",
 ]
 
 [project.readme]
