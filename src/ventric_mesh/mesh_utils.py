@@ -22,109 +22,99 @@ logger = get_logger()
 # Extracting of edges of epi and endo
 # Here we create the edges of each stack if the edges are connected so we are on the last stacks where the there is only epicardium otherwise we have both epi and endo. In this case the samples with more element (lenght) is the outer diameter and thus epicardium
 def get_endo_epi(mask):
-    if len(mask.shape) == 3:
-        mask = np.expand_dims(mask, axis=-1)
-    K, I, _, T_total = mask.shape
+    if len(mask.shape) > 3:
+        logger.error("The mask should be a list (corresponding to longitudinal slices) containting binary images (corresponding to short axis images)")
+    K, I, _ = mask.shape
     kernel = np.ones((3, 3), np.uint8)
-    mask_epi = np.zeros((K, I, I, T_total))
-    mask_endo = np.zeros((K, I, I, T_total))
+    mask_epi = np.zeros((K, I, I))
+    mask_endo = np.zeros((K, I, I))
 
-    for t in range(T_total):
-        for k in range(K):
-            mask_t = mask[k, :, :, t]
-            img = np.uint8(mask_t * 255)
-            img_dilated = binary_dilation(img, structure=kernel).astype(img.dtype)
-            img_edges = img_dilated - img
-            img_edges[img_edges == 2] = 0
-            flag, visited, visited_reversed = is_connected(img_edges)
-            if flag:
-                img_epi = img_edges
-                img_endo = np.zeros((I, I))
+    for k in range(K):
+        mask_k = mask[k, :, :]
+        img = np.uint8(mask_k * 255)
+        img_dilated = binary_dilation(img, structure=kernel).astype(img.dtype)
+        img_edges = img_dilated - img
+        img_edges[img_edges == 2] = 0
+        flag, visited, visited_reversed = is_connected(img_edges)
+        if flag:
+            img_epi = img_edges
+            img_endo = np.zeros((I, I))
+        else:
+            img_epi = np.zeros((I, I), dtype=np.uint8)
+            img_endo = np.zeros((I, I), dtype=np.uint8)
+            if len(visited) > len(visited_reversed):
+                for x, y in visited:
+                    img_epi[x, y] = 1
+                for x, y in visited_reversed:
+                    img_endo[x, y] = 1
             else:
-                img_epi = np.zeros((I, I), dtype=np.uint8)
-                img_endo = np.zeros((I, I), dtype=np.uint8)
-                if len(visited) > len(visited_reversed):
-                    for x, y in visited:
-                        img_epi[x, y] = 1
-                    for x, y in visited_reversed:
-                        img_endo[x, y] = 1
-                else:
-                    for x, y in visited_reversed:
-                        img_epi[x, y] = 1
-                    for x, y in visited:
-                        img_endo[x, y] = 1
-            mask_epi[k, :, :, t] = img_epi
-            mask_endo[k, :, :, t] = img_endo
+                for x, y in visited_reversed:
+                    img_epi[x, y] = 1
+                for x, y in visited:
+                    img_endo[x, y] = 1
+        mask_epi[k, :, :] = img_epi
+        mask_endo[k, :, :] = img_endo
     return mask_epi, mask_endo
 
 
 # ----------------------------------------------------------------
 # ------------ Creating BSplines and Smooth Contours -------------
 # ----------------------------------------------------------------
-
+def get_coords_from_mask(mask, resolution):
+    K, I, _ = mask.shape
+    coords = []
+    for k in range(K):
+        img = mask[k, :, :]
+        coords_k = coords_from_img(img, resolution)
+        if len(coords_k)>0:
+            coords.append(coords_k)
+    return coords
 
 # % Getting shax bsplines from epi and endo masks
-def get_shax_from_mask(mask, resolution, slice_thickness, smooth_level):
+def get_shax_from_coords(coords, resolution, slice_thickness, smooth_level):
     # The smooth_level is based on the area enclosed by the epi/endo points and it should.
     warnings.filterwarnings(
         "ignore", category=RuntimeWarning, module="scipy.interpolate"
     )
-    if len(mask.shape) == 3:
-        mask = np.expand_dims(mask, axis=-1)
-    K, I, _, T_total = mask.shape
-    t_nurbs = [[] for _ in range(mask.shape[3])]
-    c_nurbs = [[] for _ in range(mask.shape[3])]
-    k_nurbs = [[] for _ in range(mask.shape[3])]
+    K = len(coords)
+    tck = []
+    for k in tqdm(range(K), desc="Creating SHAX Curves", ncols=100):
+        coord_k = coords[k]
+        coords_sorted = sorting_coords(coord_k, resolution)
+        # Adding the first point to the end to make it periodic
+        coords_sorted = np.vstack((coords_sorted, coords_sorted[0, :]))
 
-    for t in tqdm(range(T_total), desc="Creating SHAX Curves", ncols=100):
-        for k in range(K):
-            img = mask[k, :, :, t]
-            coords = coords_from_img(img, resolution)
-            # the if conditions is for the endo as there are not alway K
-            if len(coords) > 0:
-                coords_sorted = sorting_coords(coords, resolution)
-                # Adding the first point to the end to make it periodic
-                np.vstack((coords_sorted, coords_sorted[0, :]))
-                # spline fitting
-                z = -(k) * slice_thickness
-                z_list = np.ones(coords_sorted.shape[0]) * z
-                area = calculate_area_points(coords_sorted)
-                tck_tk, u_epi = splprep(
-                    [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
-                    s=smooth_level * area,
-                    per=True,
-                    k=3,
-                )
-                # spline evaluations
-                t_nurbs[t].append(tck_tk[0])  # Knot vector
-                c_nurbs[t].append(tck_tk[1])  # Coefficients
-                k_nurbs[t].append(tck_tk[2])  # Degree
-    tck = (t_nurbs, c_nurbs, k_nurbs)
+        # spline fitting
+        z = -(k) * slice_thickness
+        z_list = np.ones(coords_sorted.shape[0]) * z
+        area = calculate_area_points(coords_sorted)
+        tck_k, u_epi = splprep(
+            [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
+            s=smooth_level * area,
+            per=True,
+            k=3,
+        )
+        tck.append(tck_k)        
     return tck
 
 
 # % Creating LAX BSplines from SHAX
 def get_sample_points_from_shax(tck_shax, n_points):
-    T_total = len(tck_shax[0])
-    sample_points = [[] for _ in range(T_total)]
-    for t in tqdm(range(T_total), desc="Creating LAX Sample points", ncols=100):
-        K = len(tck_shax[0][t])
-        # We find the center based on the SHAX of the last slice
-        shax_points = get_points_from_tck(tck_shax, t, -1)
-        LV_center = np.mean(shax_points[:2], axis=1)
-        for k in range(K):
-            points = get_n_points_from_shax(n_points, tck_shax, t, k, LV_center)
-            sample_points[t].append(points)
+    sample_points = []
+    K = len(tck_shax)
+    shax_points = get_points_from_tck(tck_shax, -1)
+    # We find the center based on the SHAX of the last slice
+    LV_center = np.mean(shax_points[:2], axis=1)
+    for k in tqdm(range(K), desc="Creating LAX Sample points", ncols=100):
+        points = get_n_points_from_shax(n_points, tck_shax, k, LV_center)
+        sample_points.append(points)
     return sample_points
 
 
 def get_apex_threshold(points_epi, points_endo):
-    T_total = len(points_endo)
-    threshold = np.zeros(T_total)
-    for t in range(T_total):
-        K_endo = len(points_endo[t]) - 1
-        a_epi = calculate_area_points(points_epi[t][K_endo])
-        threshold[t] = a_epi * 0.05
+    K_endo = len(points_endo) - 1
+    a_epi = calculate_area_points(points_epi[K_endo])
+    threshold = a_epi * 0.05
     return threshold
 
 
@@ -144,30 +134,26 @@ def create_lax_points(sample_points, apex_threshold, slice_thickness):
     This means that for each time step we have n_curves each has 2*K+1 which K is the number of SHAX slices and the 1 corresponds to apex.
     The apex
     """
-    T_total = len(sample_points)
-    n_points = len(sample_points[0][0])
+    n_points = len(sample_points[0])
     n_curves = int(n_points / 2)
-    LAX_points = [[] for _ in range(T_total)]
-    apex = np.zeros((T_total, 3))
-    # for t in range(T_total):
-    for t in tqdm(range(T_total), desc="Creating LAX Curves", ncols=100):
-        K = len(sample_points[t])
-        # We find the center of the last slice SHAX
-        Last_SHAX_points = sample_points[t][-1][:, :2]
-        apex[t, :] = get_apex_coords(
-            Last_SHAX_points, K, apex_threshold[t], slice_thickness
-        )
-        # We find the points for each curves of LAX
-        for m in range(n_curves):
-            points_1 = []
-            points_2 = []
-            for k in range(K):
-                points_1.append(sample_points[t][k][m])
-                points_2.append(sample_points[t][k][m + n_curves])
-            points_1 = np.array(points_1)
-            points_2 = np.array(points_2[::-1])
-            points = np.vstack((points_1, apex[t, :], points_2))
-            LAX_points[t].append(points)
+    LAX_points = []
+    K = len(sample_points)
+    # We find the center of the last slice SHAX
+    Last_SHAX_points = sample_points[-1][:, :2]
+    apex = get_apex_coords(
+        Last_SHAX_points, K, apex_threshold, slice_thickness
+    )
+    # We find the points for each curves of LAX
+    for m in tqdm(range(n_curves), desc="Creating LAX Curves", ncols=100):
+        points_1 = []
+        points_2 = []
+        for k in range(K):
+            points_1.append(sample_points[k][m])
+            points_2.append(sample_points[k][m + n_curves])
+        points_1 = np.array(points_1)
+        points_2 = np.array(points_2[::-1])
+        points = np.vstack((points_1, apex, points_2))
+        LAX_points.append(points)
     return LAX_points, apex
 
 
@@ -180,103 +166,86 @@ def get_weights_for_lax(K, weight_factor):
 
 
 def get_lax_from_laxpoints(LAX_points, smooth_level):
-    T_total = len(LAX_points)
-    n_curves = len(LAX_points[0])
-    t_nurbs = [[] for _ in range(T_total)]
-    c_nurbs = [[] for _ in range(T_total)]
-    k_nurbs = [[] for _ in range(T_total)]
-    for t in range(T_total):
-        for n in range(n_curves):
-            K = int((len(LAX_points[t][n]) - 1) / 2)
-            # We use weights to ensure that all LAX pass through base and apex
-            W_vector = get_weights_for_lax(K, 1000)
-            # spline fitting
-            tck_tk, u_epi = splprep(
-                [
-                    LAX_points[t][n][:, 0],
-                    LAX_points[t][n][:, 1],
-                    LAX_points[t][n][:, 2],
-                ],
-                w=W_vector,
-                s=smooth_level,
-                per=False,
-                k=3,
-            )
-            # spline evaluations
-            t_nurbs[t].append(tck_tk[0])  # Knot vector
-            c_nurbs[t].append(tck_tk[1])  # Coefficients
-            k_nurbs[t].append(tck_tk[2])  # Degree
-    tck = (t_nurbs, c_nurbs, k_nurbs)
+    n_curves = len(LAX_points)
+    tck = []
+    for n in range(n_curves):
+        K = int((len(LAX_points[n]) - 1) / 2)
+        # We use weights to ensure that all LAX pass through base and apex
+        W_vector = get_weights_for_lax(K, 1000)
+        # spline fitting
+        tck_n, u_epi = splprep(
+            [
+                LAX_points[n][:, 0],
+                LAX_points[n][:, 1],
+                LAX_points[n][:, 2],
+            ],
+            w=W_vector,
+            s=smooth_level,
+            per=False,
+            k=3,
+        )
+        tck.append(tck_n)
     return tck
 
 
-def get_shax_points_from_lax(tck_lax, t, z_section):
-    n_curves = len(tck_lax[0][t])
-    shax_points = np.zeros((n_curves * 2, 3))
-    for n in range(n_curves):
-        tck_lax_tn = (tck_lax[0][t][n], tck_lax[1][t][n], tck_lax[2][t][n])
-        points = splev(np.linspace(0, 1, 10000), tck_lax_tn)
+def get_shax_points_from_lax(tck_lax, z_section):
+    n_LAX = len(tck_lax)
+    shax_points = np.zeros((n_LAX * 2, 3))
+    for n in range(n_LAX):
+        tck_lax_n = tck_lax[n]
+        points = splev(np.linspace(0, 1, 10000), tck_lax_n)
         points = np.array(points)
         apex_ind = np.argmin(points[2, :])
         idx = (np.abs(points[2, :apex_ind] - z_section)).argmin()
         shax_points[n, :] = points[:, idx]
         idx = (np.abs(points[2, apex_ind:] - z_section)).argmin()
-        shax_points[n + n_curves, :] = points[:, idx + apex_ind]
+        shax_points[n + n_LAX, :] = points[:, idx + apex_ind]
     return shax_points
 
 
-def get_shax_area_from_lax(tck_lax, t, apex, num_sections):
-    n_LAX = len(tck_lax[0][t][0])
+def get_shax_area_from_lax(tck_lax, apex, num_sections):
+    n_LAX = len(tck_lax)
     shax_points = np.zeros((n_LAX * 2, 3))
-    z_list = np.linspace(0, apex[t, 2], num_sections)
+    z_list = np.linspace(0, apex[2], num_sections)
     area_shax = np.zeros(num_sections)
     # radii_shax=np.zeros(num_sections)
     for k in range(len(z_list)):
-        shax_points = get_shax_points_from_lax(tck_lax, t, z_list[k])
-        tck_tk, u_epi = splprep(
+        shax_points = get_shax_points_from_lax(tck_lax, z_list[k])
+        tck_k, u_epi = splprep(
             [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
             s=0,
             per=True,
             k=3,
         )
-        area_shax[k] = calculate_area_b_spline(tck_tk)
+        area_shax[k] = calculate_area_b_spline(tck_k)
     return area_shax
 
 
-def create_z_sections_for_shax(tck_lax, apex, t, num_sections):
+def create_z_sections_for_shax(tck_lax, apex, num_sections):
     # The area is cacluated for num_sections-1 as the base will be added at the end
-    area = get_shax_area_from_lax(tck_lax, t, apex, num_sections - 1)
+    area = get_shax_area_from_lax(tck_lax, apex, num_sections - 1)
     area_norm = area / sum(area)
-    z_sections = np.cumsum(area_norm * apex[t, 2])
+    z_sections = np.cumsum(area_norm * apex[2])
     z_sections = np.hstack([0, z_sections])
     return z_sections
 
 
 def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0):
     T_total = len(tck_lax[0])
-    # n_curves = len(tck_lax[0][0])
-    t_nurbs = [[] for _ in range(T_total)]
-    c_nurbs = [[] for _ in range(T_total)]
-    k_nurbs = [[] for _ in range(T_total)]
-    for t in tqdm(
-        range(T_total), desc="SHAX Allignment with respect to Generated LAX", ncols=100
-    ):
-        if z_sections_flag == 1:
-            z_sections = create_z_sections_for_shax(tck_lax, apex, t, num_sections)
-        elif z_sections_flag == 0:
-            z_sections = np.linspace(0, apex[t, 2], num_sections)
-        for z in z_sections:
-            shax_points = get_shax_points_from_lax(tck_lax, t, z)
-            tck_epi_tk, u_epi = splprep(
-                [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
-                s=0,
-                per=True,
-                k=3,
-            )
-            t_nurbs[t].append(tck_epi_tk[0])  # Knot vector
-            c_nurbs[t].append(tck_epi_tk[1])  # Coefficients
-            k_nurbs[t].append(tck_epi_tk[2])  # Degree
-    tck_shax = (t_nurbs, c_nurbs, k_nurbs)
+    tck_shax = []
+    if z_sections_flag == 1:
+        z_sections = create_z_sections_for_shax(tck_lax, apex, num_sections)
+    elif z_sections_flag == 0:
+        z_sections = np.linspace(0, apex[2], num_sections)
+    for z in z_sections:
+        shax_points = get_shax_points_from_lax(tck_lax, z)
+        tck_shax_k, u = splprep(
+            [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
+            s=0,
+            per=True,
+            k=3,
+        )
+        tck_shax.append(tck_shax_k)
     return tck_shax
 
 
@@ -285,11 +254,11 @@ def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0):
 # ----------------------------------------------------------------
 
 
-def equally_spaced_points_on_spline(tck_tk, N):
+def equally_spaced_points_on_spline(tck_k, N):
     # Evaluate the spline over a fine grid
     n_points = 1000
     t = np.linspace(0, 1, n_points)
-    x, y, z = splev(t, tck_tk)
+    x, y, z = splev(t, tck_k)
     points = np.vstack((x, y, z)).T
     # Compute the cumulative arc length at each point
     diff_points = np.diff(points, axis=0)
@@ -306,7 +275,7 @@ def equally_spaced_points_on_spline(tck_tk, N):
         target_length = i * segment_length
         idx = np.where(cumulative_lengths >= target_length)[0][0]
         equally_spaced_t_values[i] = t[idx]
-    x, y, z = splev(equally_spaced_t_values, tck_tk)
+    x, y, z = splev(equally_spaced_t_values, tck_k)
     points_equal_spaced = np.vstack((x, y, z)).T
     return points_equal_spaced
 
@@ -389,20 +358,17 @@ def get_apex_shax_points_from_lax(apex_tck_lax, z):
 
 
 def create_apex_shax(apex_shax_points, z_sections):
-    t_nurbs, c_nurbs, k_nurbs = [], [], []
+    tck_apex_shax = []
     for i, z in enumerate(z_sections):
         shax_points = apex_shax_points[i]
         shax_points[:,2] = z
-        tck_epi_tk, u_epi = splprep(
+        tck_epi_k, u_epi = splprep(
             [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
             s=0,
             per=True,
             k=3,
         )
-        t_nurbs.append(tck_epi_tk[0])  # Knot vector
-        c_nurbs.append(tck_epi_tk[1])  # Coefficients
-        k_nurbs.append(tck_epi_tk[2])  # Degree
-    tck_apex_shax = (t_nurbs, c_nurbs, k_nurbs)
+        tck_apex_shax.append(tck_epi_k)
     return tck_apex_shax
 
 
@@ -418,11 +384,11 @@ def pop_too_close_shax(old_shax_points):
     return old_shax_points
 
 
-def get_num_apex_slices(point_cloud, t, k, apex, seed_num_threshold):
-    num_points_last_slice = point_cloud[t][k - 1].shape[0]
+def get_num_apex_slices(point_cloud, k, apex, seed_num_threshold):
+    num_points_last_slice = point_cloud[k - 1].shape[0]
     num_apex_slices_from_points = int(num_points_last_slice / seed_num_threshold) + 1
-    slice_thickness = point_cloud[t][k - 2][0, 2] - point_cloud[t][k - 1][0, 2]
-    apex_thickness = point_cloud[t][k - 1][0, 2] - apex[t][2]
+    slice_thickness = point_cloud[k - 2][0, 2] - point_cloud[k - 1][0, 2]
+    apex_thickness = point_cloud[k - 1][0, 2] - apex[2]
     num_apex_slices_from_thickness = int(apex_thickness / slice_thickness)
     num_apex_slices = max(num_apex_slices_from_points, num_apex_slices_from_thickness)
     return num_apex_slices
@@ -444,13 +410,13 @@ def find_midpoints(last_slice_points, center, m):
     return mid_points
 
 
-def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshold):
-    K = len(tck_shax[0][t])
-    num_points_last_slice = point_cloud[t][k - 1].shape[0]
-    last_slice_points = point_cloud[t][k - 1]
+def create_apex_point_cloud(point_cloud, k, tck_shax, apex, seed_num_threshold):
+    K = len(tck_shax)
+    num_points_last_slice = point_cloud[k - 1].shape[0]
+    last_slice_points = point_cloud[k - 1]
     center = np.mean(last_slice_points, axis=0)
-    center[2] = apex[t][2]
-    check_apex_shift(apex[t], center)
+    center[2] = apex[2]
+    check_apex_shift(apex, center)
     # if the area is too big it should be scale so more intermediatry slices are considerd
     num_slices = 2
     apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
@@ -460,7 +426,7 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshol
         iter += 1
         apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
     if iter==5:    
-        logger.warning(f'Number of apex shax may not be sufficient, it is advised to decrease the seed_num_threshold')
+        logger.warning('Number of apex shax may not be sufficient, it is advised to decrease the seed_num_threshold')
 
     m = len(apex_seed_num) - 1
     old_shax_points = find_midpoints(last_slice_points, center, m)
@@ -471,16 +437,12 @@ def create_apex_point_cloud(point_cloud, t, k, tck_shax, apex, seed_num_threshol
     tck_apex_shax = create_apex_shax(old_shax_points[1:], z_sections)
 
     for n, apex_seed_num_k in enumerate(apex_seed_num[1:]):
-        tck_apex_shax_k = (
-            tck_apex_shax[0][n],
-            tck_apex_shax[1][n],
-            tck_apex_shax[2][n],
-        )
+        tck_apex_shax_k = tck_apex_shax[n]
         points = equally_spaced_points_on_spline(tck_apex_shax_k, int(apex_seed_num_k))
         points[:, 2] = np.mean(points[:, 2])
-        point_cloud[t].append(points)
+        point_cloud.append(points)
 
-    point_cloud[t].append(center)
+    point_cloud.append(center)
 
     return point_cloud
 
@@ -544,32 +506,30 @@ def third_order_interpolate(start_point, end_point, num_point):
     return z_sections
 
 def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
-    T = len(tck_shax[0])
-    point_cloud = [[] for t in range(T)]
-    apex_k = np.zeros(T)
-    for t in tqdm(range(T), desc="Creating pointcloud for mesh generation", ncols=100):
-        K = len(tck_shax[0][t])
-        area_shax = np.zeros(K)
-        for k in range(K):
-            tck_tk = (tck_shax[0][t][k], tck_shax[1][t][k], tck_shax[2][t][k])
-            area_shax[k] = calculate_area_b_spline(tck_tk)
-            seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
-            if seed_num_k < seed_num_threshold:
-                apex_k[t] = k if apex_k[t] == 0 else apex_k[t]
-                point_cloud = create_apex_point_cloud(
-                    point_cloud, t, k, tck_shax, apex, seed_num_threshold
-                )
-                break
+    point_cloud = []
+    k_apex = 0
+    K = len(tck_shax)
+    area_shax = np.zeros(K)
+    for k in tqdm(range(K), desc="Creating pointcloud for mesh generation", ncols=100):
+        tck_k = tck_shax[k]
+        area_shax[k] = calculate_area_b_spline(tck_k)
+        seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
+        if seed_num_k < seed_num_threshold:
+            k_apex = k if k_apex == 0 else k_apex
+            point_cloud = create_apex_point_cloud(
+                point_cloud, k, tck_shax, apex, seed_num_threshold
+            )
+            break
+        else:
+            points = equally_spaced_points_on_spline(tck_k, seed_num_k)
+            # ensuring that base is always at z=0
+            if k == 0:
+                points[:, 2] = 0
             else:
-                points = equally_spaced_points_on_spline(tck_tk, seed_num_k)
-                # ensuring that base is always at z=0
-                if k == 0:
-                    points[:, 2] = 0
-                else:
-                    points[:, 2] = np.mean(points[:, 2])
-                point_cloud[t].append(points)
+                points[:, 2] = np.mean(points[:, 2])
+            point_cloud.append(points)
 
-    return point_cloud, apex_k
+    return point_cloud, k_apex
 
 
 # ----------------------------------------------------------------
@@ -689,7 +649,7 @@ def create_slice_mesh(slice1, slice2, scale):
     return faces
 
 
-def create_mesh_slice_by_slice(point_cloud, scale, apex_k):
+def create_mesh_slice_by_slice(point_cloud, scale, k_apex):
     vertices = []
     faces = []
     points_cloud_aligned = align_points(point_cloud)
@@ -697,7 +657,7 @@ def create_mesh_slice_by_slice(point_cloud, scale, apex_k):
     for k in range(num_shax):
         slice1 = np.array(points_cloud_aligned[k])
         slice2 = np.array(points_cloud_aligned[k + 1])
-        if k>apex_k:
+        if k>k_apex:
             scale = 2
         slice_faces = create_slice_mesh(slice1, slice2, scale)
         faces_offset = sum(map(len, vertices))
@@ -738,30 +698,28 @@ def interpolate_splines(tck_inner, tck_outer, num_mid_layers):
 
 
 def create_base_point_cloud(points_endo, points_epi, num_mid_layers=1):
-    T_total = len(points_endo)
-    base_points_cloud = [[] for _ in range(T_total)]
-    for t in range(T_total):
-        base_endo = points_endo[t][0]
-        base_epi = points_epi[t][0]
-        # Creating 2D splines for endo and epi (using only x and y coordinates)
-        tck_endo_3d, _ = splprep(
-            [base_endo[:, 0], base_endo[:, 1], base_endo[:, 2]], s=0, per=True, k=3
+    base_points_cloud = []
+    base_endo = points_endo[0]
+    base_epi = points_epi[0]
+    # Creating 2D splines for endo and epi (using only x and y coordinates)
+    tck_endo_3d, _ = splprep(
+        [base_endo[:, 0], base_endo[:, 1], base_endo[:, 2]], s=0, per=True, k=3
+    )
+    tck_epi_3d, _ = splprep(
+        [base_epi[:, 0], base_epi[:, 1], base_epi[:, 2]], s=0, per=True, k=3
+    )
+    tck_layers = interpolate_splines(tck_endo_3d, tck_epi_3d, num_mid_layers)
+    num_points_endo = base_endo.shape[0]
+    num_points_epi = base_epi.shape[0]
+    num_points_layers = np.linspace(
+        num_points_epi, num_points_endo, num_mid_layers + 2, dtype=int
+    )
+    for n in range(len(num_points_layers)):
+        points = equally_spaced_points_on_spline(
+            tck_layers[n], num_points_layers[n]
         )
-        tck_epi_3d, _ = splprep(
-            [base_epi[:, 0], base_epi[:, 1], base_epi[:, 2]], s=0, per=True, k=3
-        )
-        tck_layers = interpolate_splines(tck_endo_3d, tck_epi_3d, num_mid_layers)
-        num_points_endo = base_endo.shape[0]
-        num_points_epi = base_epi.shape[0]
-        num_points_layers = np.linspace(
-            num_points_epi, num_points_endo, num_mid_layers + 2, dtype=int
-        )
-        for n in range(len(num_points_layers)):
-            points = equally_spaced_points_on_spline(
-                tck_layers[n], num_points_layers[n]
-            )
-            points[:, 2] = 0
-            base_points_cloud[t].append(points)
+        points[:, 2] = 0
+        base_points_cloud.append(points)
     return base_points_cloud
 
 
@@ -840,9 +798,13 @@ def NodeGenerator(
     smooth_lax_endo=0.8,
 ):
     mask_epi, mask_endo = get_endo_epi(mask)
-    tck_epi = get_shax_from_mask(mask_epi, resolution, slice_thickness, smooth_shax_epi)
-    tck_endo = get_shax_from_mask(
-        mask_endo, resolution, slice_thickness, smooth_shax_endo
+    coords_epi = get_coords_from_mask(mask_epi, resolution)
+    coords_endo = get_coords_from_mask(mask_endo, resolution)
+    tck_epi = get_shax_from_coords(
+            coords_epi, resolution, slice_thickness, smooth_shax_epi
+        )
+    tck_endo = get_shax_from_coords(
+        coords_endo, resolution, slice_thickness, smooth_shax_endo
     )
     sample_points_epi = get_sample_points_from_shax(tck_epi, n_points_lax)
     sample_points_endo = get_sample_points_from_shax(tck_endo, n_points_lax)
@@ -861,33 +823,32 @@ def NodeGenerator(
     tck_shax_endo = get_shax_from_lax(
         tck_lax_endo, apex_endo, num_z_sections_endo, z_sections_flag_endo
     )
-    points_cloud_endo, apex_k_endo = create_point_cloud(
+    points_cloud_endo, k_apex_endo = create_point_cloud(
         tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=8
     )
-    points_cloud_epi, apex_k_epi = create_point_cloud(
+    points_cloud_epi, k_apex_epi = create_point_cloud(
         tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=8
     )
-    return points_cloud_epi, points_cloud_endo, apex_k_epi, apex_k_endo
+    return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo
 
 
 def VentricMesh(
     points_cloud_epi,
     points_cloud_endo,
-    t_mesh,
     num_mid_layers_base,
-    apex_k_epi,
-    apex_k_endo,
+    k_apex_epi,
+    k_apex_endo,
     scale_for_delauny=1.2,
     save_flag=True,
     filename_suffix="",
     result_folder="",
 ):
-    vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi[t_mesh], scale=scale_for_delauny, apex_k=apex_k_epi[t_mesh])
-    vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo[t_mesh], scale=scale_for_delauny, apex_k=apex_k_endo[t_mesh])
+    vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi, scale=scale_for_delauny, k_apex=k_apex_epi)
+    vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo, scale=scale_for_delauny, k_apex=k_apex_endo)
     points_cloud_base = create_base_point_cloud(
         points_cloud_endo, points_cloud_epi, num_mid_layers_base
     )
-    vertices_base, faces_base = create_base_mesh(points_cloud_base[t_mesh])
+    vertices_base, faces_base = create_base_mesh(points_cloud_base)
     mesh_merged = merge_meshes(
         vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo
     )
