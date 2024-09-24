@@ -1091,6 +1091,8 @@ def VentricMesh_poisson(
     base_endo = get_base_from_vertices(vertices_endo)
     base_epi = get_base_from_vertices(vertices_epi)
     points_cloud_base = create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers_base)
+    points_cloud_base[0] = base_epi
+    points_cloud_base[-1] = base_endo
     vertices_base, faces_base = create_base_mesh(points_cloud_base)
     mesh_merged = merge_meshes(
         vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo
