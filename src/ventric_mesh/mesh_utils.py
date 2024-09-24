@@ -109,7 +109,7 @@ def get_sample_points_from_shax(tck_shax, n_points):
     # We find the center based on the SHAX of the last slice
     LV_center = np.mean(shax_points[:2], axis=1)
     for k in tqdm(range(K), desc="Creating LAX Sample points", ncols=100):
-        points = get_n_points_from_shax(n_points, tck_shax, k, LV_center)
+        points = get_n_points_from_shax(n_points, tck_shax[k], LV_center)
         sample_points.append(points)
     return sample_points
 
@@ -678,23 +678,34 @@ def create_mesh_slice_by_slice(point_cloud, scale, k_apex):
 def interpolate_splines(tck_inner, tck_outer, num_mid_layers):
     # Number of evaluation points
     num_points = 100
-    breakpoint()
-    u_common = np.linspace(0, 1, num_points)
-    points_inner = np.array(splev(u_common, tck_inner))
-    points_outer = np.array(splev(u_common, tck_outer))
-
+    # Evaluate splines at a fine set of parameter values to Compute centroid (common center point)
+    u_fine = np.linspace(0, 1, 1000)
+    points_inner = np.array(splev(u_fine, tck_inner))
+    points_outer = np.array(splev(u_fine, tck_outer))
+    centroid_x = np.mean(np.concatenate([points_inner[0], points_outer[0]]))
+    centroid_y = np.mean(np.concatenate([points_inner[1], points_outer[1]]))
+    LV_center = [centroid_x, centroid_y,0.0]
+    equally_spaced_points_inner = get_n_points_from_shax(num_points, tck_inner, LV_center)
+    equally_spaced_points_outer = get_n_points_from_shax(num_points, tck_outer, LV_center)
+    plt.plot(equally_spaced_points_inner[:,0],equally_spaced_points_inner[:,1], 'b')
+    plt.plot(equally_spaced_points_outer[:,0],equally_spaced_points_outer[:,1],'r')
+    plt.savefig('test_0.png')
     # Create intermediate control points from epi to endo
     mid_layers_points = []
+    
     for i in reversed(range(1, num_mid_layers + 1)):
         fraction = i / (num_mid_layers + 1)
-        mid_points = (1 - fraction) * points_inner + fraction * points_outer
+        mid_points = []
+        for point_inner, point_outer in zip(equally_spaced_points_inner,equally_spaced_points_outer):
+            mid_point = (1 - fraction) * (point_inner) + fraction * (point_outer)
+            mid_points.append(mid_point)
+        mid_points = np.array(mid_points)
         mid_layers_points.append(mid_points)
-
     # Generate new spline representations for the mid-layers
     tck_layers = []
     tck_layers.append(tck_outer)
     for points in mid_layers_points:
-        tck, _ = splprep([points[0], points[1], points[2]], s=0, per=True, k=3)
+        tck, _ = splprep([points[:,0], points[:,1], points[:,2]], s=0, per=True, k=3)
         tck_layers.append(tck)
     tck_layers.append(tck_inner)
     return tck_layers
@@ -703,7 +714,6 @@ def interpolate_splines(tck_inner, tck_outer, num_mid_layers):
 def create_base_point_cloud(base_endo, base_epi, num_mid_layers=1):
     base_points_cloud = []
     # Creating 2D splines for endo and epi (using only x and y coordinates)
-    breakpoint()
     tck_endo_3d, _ = splprep(
         [base_endo[:, 0], base_endo[:, 1], base_endo[:, 2]], s=0, per=True, k=3
     )
@@ -724,6 +734,30 @@ def create_base_point_cloud(base_endo, base_epi, num_mid_layers=1):
         base_points_cloud.append(points)
     return base_points_cloud
 
+
+def create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers=1):
+    base_points_cloud = []
+    # we flatten the basal points to z=0 while for z coordinates we use linear interpolations
+    z_values = np.linspace(base_epi[0, 2],base_endo[0, 2],num_mid_layers + 2)
+    tck_endo_3d, _ = splprep(
+    [base_endo[:, 0], base_endo[:, 1], np.zeros_like(base_endo[:, 2])], s=0, per=True, k=3
+    )
+    tck_epi_3d, _ = splprep(
+        [base_epi[:, 0], base_epi[:, 1], np.zeros_like(base_epi[:, 2])], s=0, per=True, k=3
+    )
+    tck_layers = interpolate_splines(tck_endo_3d, tck_epi_3d, num_mid_layers)
+    num_points_endo = base_endo.shape[0]
+    num_points_epi = base_epi.shape[0]
+    num_points_layers = np.linspace(
+        num_points_epi, num_points_endo, num_mid_layers + 2, dtype=int
+    )
+    for n in range(len(num_points_layers)):
+        points = equally_spaced_points_on_spline(
+            tck_layers[n], num_points_layers[n]
+        )
+        points[:, 2] = z_values[n]
+        base_points_cloud.append(points)
+    return base_points_cloud
 
 def create_base_mesh(base_points):
     vertices = np.vstack(base_points)
@@ -1056,7 +1090,7 @@ def VentricMesh_poisson(
     
     base_endo = get_base_from_vertices(vertices_endo)
     base_epi = get_base_from_vertices(vertices_epi)
-    points_cloud_base = create_base_point_cloud(base_endo, base_epi, num_mid_layers_base)
+    points_cloud_base = create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers_base)
     vertices_base, faces_base = create_base_mesh(points_cloud_base)
     mesh_merged = merge_meshes(
         vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo

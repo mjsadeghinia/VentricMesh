@@ -216,7 +216,7 @@ def sample_bspline_from_angles(tck, n_points, side="upper", center=None):
     return points
 
 
-def get_n_points_from_shax(n_points, tck, k, LV_center):
+def get_n_points_from_shax(n_points, tck_k, LV_center):
     """
     Divide the shax into several slices with equal angles to get n_points, which should be an even number
 
@@ -226,7 +226,6 @@ def get_n_points_from_shax(n_points, tck, k, LV_center):
     :param LV_center:       The coords of the center
     :return:                Coordinates of the points.
     """
-    tck_k = tck[k]
     points_upper = sample_bspline_from_angles(
         tck_k, int(n_points / 2) + 1, side="upper", center=LV_center
     )
