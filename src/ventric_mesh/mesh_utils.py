@@ -1273,7 +1273,7 @@ def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, me
         p = gmsh.model.addPhysicalGroup(2, tag)
         gmsh.model.setPhysicalName(2, p, name)
 
-    p = gmsh.model.addPhysicalGroup(3, [vol], 1)
+    p = gmsh.model.addPhysicalGroup(3, [vol], 9)
     gmsh.model.setPhysicalName(3, p, "Wall")
 
     
