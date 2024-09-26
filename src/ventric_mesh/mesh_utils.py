@@ -687,9 +687,6 @@ def interpolate_splines(tck_inner, tck_outer, num_mid_layers):
     LV_center = [centroid_x, centroid_y,0.0]
     equally_spaced_points_inner = get_n_points_from_shax(num_points, tck_inner, LV_center)
     equally_spaced_points_outer = get_n_points_from_shax(num_points, tck_outer, LV_center)
-    plt.plot(equally_spaced_points_inner[:,0],equally_spaced_points_inner[:,1], 'b')
-    plt.plot(equally_spaced_points_outer[:,0],equally_spaced_points_outer[:,1],'r')
-    plt.savefig('test_0.png')
     # Create intermediate control points from epi to endo
     mid_layers_points = []
     
@@ -944,9 +941,6 @@ def remesh_surface(stl_fname, mesh_size=1):
 
         # Save the mesh in STL format
         gmsh.write(stl_fname)
-
-        logger.info(f"Surface mesh saved to {stl_fname}")
-
         # Return vertices and faces
         return vertices, faces
 
@@ -960,18 +954,23 @@ def remesh_surface(stl_fname, mesh_size=1):
         
         
 def generate_surface_mesh_from_pointclouds(points_cloud, mesh_size=1, output_folder="output", fname_suffix=''):
+    logger.info(f'{fname_suffix} points cloud are being preprocessed ...')
     pcd = make_open3d_point_cloud(points_cloud)
     # Preprocess the point cloud
     pcd = preprocess_point_cloud(pcd)
+    logger.info(f'{fname_suffix} points cloud normals are estimated')
     # Create surface mesh from point cloud
     mesh = create_surface_mesh(pcd)
+    logger.info(f'{fname_suffix} initial surface is reconstructed based on Poisson surface reconstruction')
     # Compute normals for the mesh (required for STL export)
     mesh.compute_vertex_normals()
     # Save the mesh as STL
     stl_fname = f"{output_folder}/surface_{fname_suffix}.stl" if fname_suffix != '' else f"{output_folder}/surface.stl"
     o3d.io.write_triangle_mesh(stl_fname, mesh)
     optimize_stl_mesh(stl_fname)
+    logger.info(f'{fname_suffix} mesh is being optimized')
     vertices, faces = remesh_surface(stl_fname, mesh_size=mesh_size)
+    logger.info(f'{fname_suffix} is remeshed based on user mesh_size = {mesh_size}')
     return vertices, faces
     
 def get_base_from_vertices(vertices):
@@ -1077,16 +1076,18 @@ def VentricMesh_poisson(
     points_cloud_epi,
     points_cloud_endo,
     num_mid_layers_base,
-    mesh_size_epi=1,
-    mesh_size_endo=1,
+    SurfaceMeshSizeEpi=1,
+    SurfaceMeshSizeEndo=1,
+    MeshSizeMax=None, 
+    MeshSizeMin=None,
     save_flag=True,
     filename_suffix="",
     result_folder="",
 ):
     stacked_points_epi = np.vstack(points_cloud_epi)
     stacked_points_endo = np.vstack(points_cloud_endo)
-    vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(stacked_points_epi, mesh_size=mesh_size_epi, output_folder=result_folder, fname_suffix='epi')
-    vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(stacked_points_endo, mesh_size=mesh_size_endo, output_folder=result_folder, fname_suffix='endo')
+    vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(stacked_points_epi, mesh_size=SurfaceMeshSizeEpi, output_folder=result_folder, fname_suffix='epi')
+    vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(stacked_points_endo, mesh_size=SurfaceMeshSizeEndo, output_folder=result_folder, fname_suffix='endo')
     
     base_endo = get_base_from_vertices(vertices_endo)
     base_epi = get_base_from_vertices(vertices_epi)
@@ -1113,7 +1114,7 @@ def VentricMesh_poisson(
     mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
     mesh_base.save(mesh_base_filename)
     output_mesh_filename = result_folder+'Mesh_3D.msh'
-    generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename)
+    generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename, MeshSizeMax=MeshSizeMax, MeshSizeMin=MeshSizeMin)
     return mesh_merged
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
@@ -1203,7 +1204,7 @@ def print_mesh_quality_report(n_bins, file_path=None):
     else:
         file = None
     
-    line = "Quality report of the final volumetri mesh:"
+    line = "Quality report of the final volumetric mesh:"
     print(line)
     if file:
         file.write(line + '\n')
@@ -1240,16 +1241,18 @@ def generate_3d_mesh_from_stl(stl_path, mesh_path, MeshSizeMin=None, MeshSizeMax
     gmsh.model.mesh.Recombine3DAll = 0
     gmsh.model.mesh.generate(3)
     gmsh.write(mesh_path)
+    print("===============================")
     print_mesh_quality_report(10, file_path=stl_path[:-4]+'_report.txt')
     print("===============================")
     print("===============================")
     gmsh.finalize()
 
 
-def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename):
+def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename,  MeshSizeMin=None, MeshSizeMax=None):
     # Initialize Gmsh
     gmsh.initialize()
     gmsh.model.add("3D Mesh")
+    gmsh.option.setNumber("General.Verbosity", 0)
 
     # Merge the STL files
     gmsh.merge(mesh_epi_filename)
@@ -1276,11 +1279,17 @@ def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, me
     p = gmsh.model.addPhysicalGroup(3, [vol], 9)
     gmsh.model.setPhysicalName(3, p, "Wall")
 
-    
+    if MeshSizeMin is not None:
+        gmsh.option.setNumber('Mesh.MeshSizeMin', MeshSizeMin)
+    if MeshSizeMax is not None:
+        gmsh.option.setNumber('Mesh.MeshSizeMax', MeshSizeMax)
+            
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
     # Save the mesh to the specified file
+    print("===============================")
     gmsh.write(output_mesh_filename)
-
+    print_mesh_quality_report(10, file_path=output_mesh_filename[:-4]+'_report.txt')
+    print("===============================")
     # Finalize Gmsh
     gmsh.finalize()
