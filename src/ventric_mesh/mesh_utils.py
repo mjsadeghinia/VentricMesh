@@ -861,7 +861,7 @@ def optimize_stl_mesh(stl_fname):
     gmsh.merge(stl_fname)
     # Classify surfaces to prepare for meshing
     # Here, we define the angle (in degrees) between two triangles that will be considered sharp
-    angle = 40
+    angle = 60
     # Force the mesh elements to be classified on discrete entities
     # (surfaces, curves) that respect the sharp edges
     gmsh.model.mesh.classifySurfaces(angle * (3.141592653589793 / 180.0), True, False, 0.01, True)
@@ -902,7 +902,7 @@ def remesh_surface(stl_fname, mesh_size=1):
     try:
         gmsh.merge(stl_fname)
         # Classify surfaces to create geometry
-        angle = 40  # Angle threshold for feature detection in degrees
+        angle = 60 # Angle threshold for feature detection in degrees
         force_parametrizable_patches = True
         include_boundary = True
         curve_angle = 180  # For sewing surfaces
@@ -972,15 +972,37 @@ def generate_surface_mesh_from_pointclouds(points_cloud, mesh_size=1, output_fol
     vertices, faces = remesh_surface(stl_fname, mesh_size=mesh_size)
     logger.info(f'{fname_suffix} is remeshed based on user mesh_size = {mesh_size}')
     return vertices, faces
-    
+
+def sort_vertices_by_proximity(vertices):
+    n = vertices.shape[0]
+    sorted_indices = []
+    unvisited = set(range(n))
+    current_index = 0  # You can choose any starting point
+    sorted_indices.append(current_index)
+    unvisited.remove(current_index)
+
+    while unvisited:
+        current_point = vertices[current_index]
+        # Compute distances to all unvisited points
+        unvisited_indices = np.array(list(unvisited))
+        unvisited_points = vertices[unvisited_indices]
+        distances = np.linalg.norm(unvisited_points - current_point, axis=1)
+        # Find the nearest unvisited point
+        nearest_index = unvisited_indices[np.argmin(distances)]
+        sorted_indices.append(nearest_index)
+        unvisited.remove(nearest_index)
+        current_index = nearest_index
+
+    # Return the sorted vertices
+    return vertices[sorted_indices]
+
 def get_base_from_vertices(vertices):
     # Find indices where the z-coordinate is at the maximum value (base)
     idx = np.where(vertices[:, 2] == np.max(vertices[:, 2]))
     vertices_base = vertices[idx]
-    # Add the first vertex to the end to close the loop
-    vertices_base = np.vstack([vertices_base, vertices_base[0]])
-    
-    return vertices_base
+    vertices_base_sorted = sort_vertices_by_proximity(vertices_base)
+    vertices_base_sorted = np.vstack([vertices_base_sorted, vertices_base_sorted[0]])
+    return vertices_base_sorted
 
 # %%
 # ----------------------------------------------------------------
