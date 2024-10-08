@@ -387,6 +387,48 @@ def plot_3d_LAX(ax, n_list, tck_epi, tck_endo=None):
 
     return ax
 
+def plotly_3d_LAX(fig, n_list, tck_epi, tck_endo=None):
+    """
+    Plots the 3D LAX spline shapes for a given t, where n corresponds the list of curve numbers.
+    :param k:           Index for the specific set of data
+    :param t:           Time index
+    :param tck_epi:     epi splines data stored as (t_nurbs_epi,c_nurbs_epi,k_nurbs_epi)
+    :param tck_endo:    endo splines data stored as (t_nurbs_endo,c_nurbs_endo,k_nurbs_endo)
+    """
+
+    for n in n_list:
+        # Plot epicardial spline
+        tck_epi_n = tck_epi[n]
+        new_points_epi = splev(np.linspace(0, 1, 1000), tck_epi_n)
+        fig.add_trace(
+            go.Scatter3d(
+                x=new_points_epi[0],
+                y=new_points_epi[1],
+                z=new_points_epi[2],
+                showlegend=False,
+                mode="lines",
+                name=f"SHAX Epi n={n}",
+                line=dict(color="red"),
+            )
+        )
+        # Plot endocardial spline if data is available
+        if tck_endo:
+            tck_endo_n = tck_endo[n]
+            new_points_endo = splev(np.linspace(0, 1, 1000), tck_endo_n)
+            fig.add_trace(
+            go.Scatter3d(
+                x=new_points_endo[0],
+                y=new_points_endo[1],
+                z=new_points_endo[2],
+                showlegend=False,
+                mode="lines",
+                name=f"SHAX Endo n={n}",
+                line=dict(color="red"),
+            )
+        )
+
+    fig.update_layout(scene_camera=dict(eye=dict(x=2, y=2, z=2)))
+    return fig
 
 def plotly_3d_contours(
     fig, tck_shax_epi, tck_lax_epi, tck_shax_endo=None, tck_lax_endo=None
@@ -583,4 +625,28 @@ def plot_3d_points_on_figure(data_array, fig=None):
             margin=dict(l=0, r=0, b=0, t=0),
         )
 
+    return fig
+
+
+
+def plotly_3d_base_splines(tck_layers, fig=None):
+    
+    # Check if figure is provided, else create a new one
+    if fig is None:
+        fig = go.Figure()
+    
+    for tck in tck_layers:
+        # Plot epicardial spline
+        points = splev(np.linspace(0, 1, 1000), tck)
+        fig.add_trace(
+            go.Scatter3d(
+                x=points[0],
+                y=points[1],
+                z=points[2],
+                showlegend=False,
+                mode="lines",
+                line=dict(color="black"),
+            )
+        )
+    fig.update_layout(scene_camera=dict(eye=dict(x=2, y=2, z=2)))
     return fig
