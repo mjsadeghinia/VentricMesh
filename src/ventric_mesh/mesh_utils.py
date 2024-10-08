@@ -27,10 +27,10 @@ logger = get_logger()
 def get_endo_epi(mask):
     if len(mask.shape) > 3:
         logger.error("The mask should be a list (corresponding to longitudinal slices) containting binary images (corresponding to short axis images)")
-    K, I, _ = mask.shape
+    K, I, J = mask.shape
     kernel = np.ones((3, 3), np.uint8)
-    mask_epi = np.zeros((K, I, I))
-    mask_endo = np.zeros((K, I, I))
+    mask_epi = np.zeros((K, I, J))
+    mask_endo = np.zeros((K, I, J))
 
     for k in range(K):
         mask_k = mask[k, :, :]
@@ -41,10 +41,10 @@ def get_endo_epi(mask):
         flag, visited, visited_reversed = is_connected(img_edges)
         if flag:
             img_epi = img_edges
-            img_endo = np.zeros((I, I))
+            img_endo = np.zeros((I, J))
         else:
-            img_epi = np.zeros((I, I), dtype=np.uint8)
-            img_endo = np.zeros((I, I), dtype=np.uint8)
+            img_epi = np.zeros((I, J), dtype=np.uint8)
+            img_endo = np.zeros((I, J), dtype=np.uint8)
             if len(visited) > len(visited_reversed):
                 for x, y in visited:
                     img_epi[x, y] = 1
