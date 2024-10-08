@@ -626,3 +626,27 @@ def plot_3d_points_on_figure(data_array, fig=None):
         )
 
     return fig
+
+
+
+def plotly_3d_base_splines(tck_layers, fig=None):
+    
+    # Check if figure is provided, else create a new one
+    if fig is None:
+        fig = go.Figure()
+    
+    for tck in tck_layers:
+        # Plot epicardial spline
+        points = splev(np.linspace(0, 1, 1000), tck)
+        fig.add_trace(
+            go.Scatter3d(
+                x=points[0],
+                y=points[1],
+                z=points[2],
+                showlegend=False,
+                mode="lines",
+                line=dict(color="black"),
+            )
+        )
+    fig.update_layout(scene_camera=dict(eye=dict(x=2, y=2, z=2)))
+    return fig
