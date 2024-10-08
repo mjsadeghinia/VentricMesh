@@ -185,7 +185,7 @@ def get_lax_from_laxpoints(LAX_points, smooth_level):
             w=W_vector,
             s=smooth_level,
             per=False,
-            k=3,
+            k=5,
         )
         tck.append(tck_n)
     return tck
