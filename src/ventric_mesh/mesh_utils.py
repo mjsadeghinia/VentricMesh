@@ -1,5 +1,8 @@
 # %%
 import numpy as np
+import open3d as o3d
+import os
+
 from scipy.spatial import Delaunay
 from scipy.interpolate import splev
 from scipy.interpolate import splprep
@@ -106,7 +109,7 @@ def get_sample_points_from_shax(tck_shax, n_points):
     # We find the center based on the SHAX of the last slice
     LV_center = np.mean(shax_points[:2], axis=1)
     for k in tqdm(range(K), desc="Creating LAX Sample points", ncols=100):
-        points = get_n_points_from_shax(n_points, tck_shax, k, LV_center)
+        points = get_n_points_from_shax(n_points, tck_shax[k], LV_center)
         sample_points.append(points)
     return sample_points
 
@@ -675,32 +678,41 @@ def create_mesh_slice_by_slice(point_cloud, scale, k_apex):
 def interpolate_splines(tck_inner, tck_outer, num_mid_layers):
     # Number of evaluation points
     num_points = 100
-
-    u_common = np.linspace(0, 1, num_points)
-    points_inner = np.array(splev(u_common, tck_inner))
-    points_outer = np.array(splev(u_common, tck_outer))
-
+    # Evaluate splines at a fine set of parameter values to Compute centroid (common center point)
+    u_fine = np.linspace(0, 1, 1000)
+    points_inner = np.array(splev(u_fine, tck_inner))
+    points_outer = np.array(splev(u_fine, tck_outer))
+    centroid_x = np.mean(np.concatenate([points_inner[0], points_outer[0]]))
+    centroid_y = np.mean(np.concatenate([points_inner[1], points_outer[1]]))
+    LV_center = [centroid_x, centroid_y,0.0]
+    equally_spaced_points_inner = get_n_points_from_shax(num_points, tck_inner, LV_center)
+    equally_spaced_points_outer = get_n_points_from_shax(num_points, tck_outer, LV_center)
+    plt.plot(equally_spaced_points_inner[:,0],equally_spaced_points_inner[:,1], 'b')
+    plt.plot(equally_spaced_points_outer[:,0],equally_spaced_points_outer[:,1],'r')
+    plt.savefig('test_0.png')
     # Create intermediate control points from epi to endo
     mid_layers_points = []
+    
     for i in reversed(range(1, num_mid_layers + 1)):
         fraction = i / (num_mid_layers + 1)
-        mid_points = (1 - fraction) * points_inner + fraction * points_outer
+        mid_points = []
+        for point_inner, point_outer in zip(equally_spaced_points_inner,equally_spaced_points_outer):
+            mid_point = (1 - fraction) * (point_inner) + fraction * (point_outer)
+            mid_points.append(mid_point)
+        mid_points = np.array(mid_points)
         mid_layers_points.append(mid_points)
-
     # Generate new spline representations for the mid-layers
     tck_layers = []
     tck_layers.append(tck_outer)
     for points in mid_layers_points:
-        tck, _ = splprep([points[0], points[1], points[2]], s=0, per=True, k=3)
+        tck, _ = splprep([points[:,0], points[:,1], points[:,2]], s=0, per=True, k=3)
         tck_layers.append(tck)
     tck_layers.append(tck_inner)
     return tck_layers
 
 
-def create_base_point_cloud(points_endo, points_epi, num_mid_layers=1):
+def create_base_point_cloud(base_endo, base_epi, num_mid_layers=1):
     base_points_cloud = []
-    base_endo = points_endo[0]
-    base_epi = points_epi[0]
     # Creating 2D splines for endo and epi (using only x and y coordinates)
     tck_endo_3d, _ = splprep(
         [base_endo[:, 0], base_endo[:, 1], base_endo[:, 2]], s=0, per=True, k=3
@@ -722,6 +734,30 @@ def create_base_point_cloud(points_endo, points_epi, num_mid_layers=1):
         base_points_cloud.append(points)
     return base_points_cloud
 
+
+def create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers=1):
+    base_points_cloud = []
+    # we flatten the basal points to z=0 while for z coordinates we use linear interpolations
+    z_values = np.linspace(base_epi[0, 2],base_endo[0, 2],num_mid_layers + 2)
+    tck_endo_3d, _ = splprep(
+    [base_endo[:, 0], base_endo[:, 1], np.zeros_like(base_endo[:, 2])], s=0, per=True, k=3
+    )
+    tck_epi_3d, _ = splprep(
+        [base_epi[:, 0], base_epi[:, 1], np.zeros_like(base_epi[:, 2])], s=0, per=True, k=3
+    )
+    tck_layers = interpolate_splines(tck_endo_3d, tck_epi_3d, num_mid_layers)
+    num_points_endo = base_endo.shape[0]
+    num_points_epi = base_epi.shape[0]
+    num_points_layers = np.linspace(
+        num_points_epi, num_points_endo, num_mid_layers + 2, dtype=int
+    )
+    for n in range(len(num_points_layers)):
+        points = equally_spaced_points_on_spline(
+            tck_layers[n], num_points_layers[n]
+        )
+        points[:, 2] = z_values[n]
+        base_points_cloud.append(points)
+    return base_points_cloud
 
 def create_base_mesh(base_points):
     vertices = np.vstack(base_points)
@@ -775,7 +811,177 @@ def merge_meshes(
     merged_faces = np.vstack((faces_epi, new_faces_endo, new_faces_base))
     mesh_merged = create_mesh(merged_vertices, merged_faces)
     return mesh_merged
+# %%
+# ----------------------------------------------------------------
+# ----- Poisson surface reconstruction and mesh generation  ------
+# ----------------------------------------------------------------
+def make_open3d_point_cloud(points: np.array):
+    # Create an Open3D point cloud from the numpy array
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
 
+    return pcd
+
+def preprocess_point_cloud(pcd, k=10):
+    """
+    Preprocess the point cloud: estimate normals and orient them consistently.
+    """
+    # Estimate normals
+    pcd.estimate_normals()
+
+    # Orient normals consistently
+    pcd.orient_normals_consistent_tangent_plane(k=k)
+
+    return pcd
+
+def create_surface_mesh(pcd):
+    """
+    Create a surface mesh from the point cloud using Poisson reconstruction.
+    """
+    # Perform Poisson surface reconstruction
+    mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
+        pcd, depth=5
+    )
+
+    # Optional: Clean up the mesh
+    mesh.remove_non_manifold_edges()
+    mesh.remove_degenerate_triangles()
+    mesh.remove_duplicated_triangles()
+    mesh.remove_duplicated_vertices()
+
+    return mesh
+        
+def optimize_stl_mesh(stl_fname):
+    gmsh.initialize()
+    # Optionally output messages to the terminal
+    gmsh.option.setNumber("General.Terminal", 0)
+    gmsh.model.add("SurfaceMesh")
+    # Check if the file exists
+    if not os.path.isfile(stl_fname):
+        logger.error(f"Error: File '{stl_fname}' not found.")
+        gmsh.finalize()
+        return
+    gmsh.merge(stl_fname)
+    # Classify surfaces to prepare for meshing
+    # Here, we define the angle (in degrees) between two triangles that will be considered sharp
+    angle = 40
+    # Force the mesh elements to be classified on discrete entities
+    # (surfaces, curves) that respect the sharp edges
+    gmsh.model.mesh.classifySurfaces(angle * (3.141592653589793 / 180.0), True, False, 0.01, True)
+    # Create geometry from the classified mesh
+    gmsh.model.mesh.createGeometry()
+    # Synchronize the built-in CAD kernel with the Gmsh model
+    gmsh.model.geo.synchronize()
+    # Generate 2D mesh
+    gmsh.model.mesh.generate(2)
+    # Save the mesh to a file
+    gmsh.write(stl_fname)
+    # Finalize Gmsh
+    gmsh.finalize()
+    
+
+def remesh_surface(stl_fname, mesh_size=1):
+    """
+    Remeshes a 3D surface mesh from an STL file with a specified mesh size
+    and saves the output in STL format with a "_coarse" suffix.
+
+    Parameters:
+    - stl_fname: str to the input STL file.
+    - mesh_size: float, characteristic length for mesh elements (higher values for coarser mesh).
+
+    Returns:
+    - vertices: numpy array of shape (n_nodes, 3)
+    - faces: numpy array of shape (n_faces, 3), indices into vertices
+    """
+    # Check if the file exists
+    if not os.path.isfile(stl_fname):
+        logger.error(f"Error: File '{stl_fname}' not found.")
+        return None, None
+
+    # Initialize Gmsh
+    gmsh.initialize()
+    gmsh.option.setNumber("General.Terminal", 0)  # Enable terminal output
+
+    try:
+        gmsh.merge(stl_fname)
+        # Classify surfaces to create geometry
+        angle = 40  # Angle threshold for feature detection in degrees
+        force_parametrizable_patches = True
+        include_boundary = True
+        curve_angle = 180  # For sewing surfaces
+
+        gmsh.model.mesh.classifySurfaces(
+            angle * math.pi / 180.0, include_boundary,
+            force_parametrizable_patches,
+            curve_angle * math.pi / 180.0
+        )
+
+        # Create geometry from the classified surfaces
+        gmsh.model.mesh.createGeometry()
+
+        # Synchronize the model
+        gmsh.model.geo.synchronize()
+
+        # Set the specified mesh size
+        gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size)
+
+        # Generate the 2D mesh
+        gmsh.model.mesh.generate(2)
+
+        # Extract nodes and elements
+        node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
+        vertices = np.array(node_coords).reshape(-1, 3)
+
+        # Create a mapping from node tags to indices
+        node_index = {tag: idx for idx, tag in enumerate(node_tags)}
+
+        elementType = 2  # 3-node triangle
+        _, element_node_tags = gmsh.model.mesh.getElementsByType(elementType)
+        element_node_tags = np.array(element_node_tags).reshape(-1, 3)
+
+        # Map node tags to indices to create faces array
+        faces = np.array([[node_index[tag] for tag in tri] for tri in element_node_tags])
+
+        # Save the mesh in STL format
+        gmsh.write(stl_fname)
+
+        logger.info(f"Surface mesh saved to {stl_fname}")
+
+        # Return vertices and faces
+        return vertices, faces
+
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        return None, None
+
+    finally:
+        # Finalize Gmsh
+        gmsh.finalize()
+        
+        
+def generate_surface_mesh_from_pointclouds(points_cloud, mesh_size=1, output_folder="output", fname_suffix=''):
+    pcd = make_open3d_point_cloud(points_cloud)
+    # Preprocess the point cloud
+    pcd = preprocess_point_cloud(pcd)
+    # Create surface mesh from point cloud
+    mesh = create_surface_mesh(pcd)
+    # Compute normals for the mesh (required for STL export)
+    mesh.compute_vertex_normals()
+    # Save the mesh as STL
+    stl_fname = f"{output_folder}/surface_{fname_suffix}.stl" if fname_suffix != '' else f"{output_folder}/surface.stl"
+    o3d.io.write_triangle_mesh(stl_fname, mesh)
+    optimize_stl_mesh(stl_fname)
+    vertices, faces = remesh_surface(stl_fname, mesh_size=mesh_size)
+    return vertices, faces
+    
+def get_base_from_vertices(vertices):
+    # Find indices where the z-coordinate is at the maximum value (base)
+    idx = np.where(vertices[:, 2] == np.max(vertices[:, 2]))
+    vertices_base = vertices[idx]
+    # Add the first vertex to the end to close the loop
+    vertices_base = np.vstack([vertices_base, vertices_base[0]])
+    
+    return vertices_base
 
 # %%
 # ----------------------------------------------------------------
@@ -832,7 +1038,7 @@ def NodeGenerator(
     return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo
 
 
-def VentricMesh(
+def VentricMesh_delaunay(
     points_cloud_epi,
     points_cloud_endo,
     num_mid_layers_base,
@@ -845,9 +1051,7 @@ def VentricMesh(
 ):
     vertices_epi, faces_epi = create_mesh_slice_by_slice(points_cloud_epi, scale=scale_for_delauny, k_apex=k_apex_epi)
     vertices_endo, faces_endo = create_mesh_slice_by_slice(points_cloud_endo, scale=scale_for_delauny, k_apex=k_apex_endo)
-    points_cloud_base = create_base_point_cloud(
-        points_cloud_endo, points_cloud_epi, num_mid_layers_base
-    )
+    points_cloud_base = create_base_point_cloud(points_cloud_endo[0], points_cloud_epi[0], num_mid_layers_base)
     vertices_base, faces_base = create_base_mesh(points_cloud_base)
     mesh_merged = merge_meshes(
         vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo
@@ -869,7 +1073,48 @@ def VentricMesh(
     # mesh_base.save(mesh_base_filename)
     return mesh_merged
 
-
+def VentricMesh_poisson(
+    points_cloud_epi,
+    points_cloud_endo,
+    num_mid_layers_base,
+    mesh_size_epi=1,
+    mesh_size_endo=1,
+    save_flag=True,
+    filename_suffix="",
+    result_folder="",
+):
+    stacked_points_epi = np.vstack(points_cloud_epi)
+    stacked_points_endo = np.vstack(points_cloud_endo)
+    vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(stacked_points_epi, mesh_size=mesh_size_epi, output_folder=result_folder, fname_suffix='epi')
+    vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(stacked_points_endo, mesh_size=mesh_size_endo, output_folder=result_folder, fname_suffix='endo')
+    
+    base_endo = get_base_from_vertices(vertices_endo)
+    base_epi = get_base_from_vertices(vertices_epi)
+    points_cloud_base = create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers_base)
+    points_cloud_base[0] = base_epi
+    points_cloud_base[-1] = base_endo
+    vertices_base, faces_base = create_base_mesh(points_cloud_base)
+    mesh_merged = merge_meshes(
+        vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo
+    )
+    if filename_suffix == "":
+        mesh_merged_filename = result_folder + "Mesh.stl"
+    else:
+        mesh_merged_filename = result_folder + "Mesh_" + filename_suffix + ".stl"
+    if save_flag:
+        mesh_merged.save(mesh_merged_filename)
+    mesh_epi = create_mesh(vertices_epi, faces_epi)
+    mesh_epi_filename = result_folder + "Mesh_epi_" + filename_suffix + ".stl"
+    mesh_epi.save(mesh_epi_filename)
+    mesh_endo = create_mesh(vertices_endo, faces_endo)
+    mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
+    mesh_endo.save(mesh_endo_filename)
+    mesh_base=create_mesh(vertices_base,faces_base)
+    mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
+    mesh_base.save(mesh_base_filename)
+    output_mesh_filename = result_folder+'Mesh_3D.msh'
+    generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename)
+    return mesh_merged
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
 # ----------------------------------------------------------------
@@ -998,4 +1243,44 @@ def generate_3d_mesh_from_stl(stl_path, mesh_path, MeshSizeMin=None, MeshSizeMax
     print_mesh_quality_report(10, file_path=stl_path[:-4]+'_report.txt')
     print("===============================")
     print("===============================")
+    gmsh.finalize()
+
+
+def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename):
+    # Initialize Gmsh
+    gmsh.initialize()
+    gmsh.model.add("3D Mesh")
+
+    # Merge the STL files
+    gmsh.merge(mesh_epi_filename)
+    gmsh.merge(mesh_endo_filename)
+    gmsh.merge(mesh_base_filename)
+
+    gmsh.model.mesh.removeDuplicateNodes()
+    gmsh.model.mesh.create_geometry()
+    gmsh.model.mesh.create_topology()
+    surfaces = gmsh.model.getEntities(2)
+    
+    gmsh.model.geo.addSurfaceLoop([s[1] for s in surfaces], 1)
+    vol = gmsh.model.geo.addVolume([1], 1)
+    
+    physical_groups = {
+        "Epi": [1],
+        "Endo": [2],
+        "Base": [3],
+    }
+    for name, tag in physical_groups.items():
+        p = gmsh.model.addPhysicalGroup(2, tag)
+        gmsh.model.setPhysicalName(2, p, name)
+
+    p = gmsh.model.addPhysicalGroup(3, [vol], 9)
+    gmsh.model.setPhysicalName(3, p, "Wall")
+
+    
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(3)
+    # Save the mesh to the specified file
+    gmsh.write(output_mesh_filename)
+
+    # Finalize Gmsh
     gmsh.finalize()
