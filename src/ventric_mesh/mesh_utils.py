@@ -63,41 +63,42 @@ def get_endo_epi(mask):
 # ----------------------------------------------------------------
 # ------------ Creating BSplines and Smooth Contours -------------
 # ----------------------------------------------------------------
-def get_coords_from_mask(mask, resolution):
+def get_coords_from_mask(mask, resolution, slice_thickness):
     K, I, _ = mask.shape
     coords = []
     for k in range(K):
         img = mask[k, :, :]
         coords_k = coords_from_img(img, resolution)
-        if len(coords_k)>0:
-            coords.append(coords_k)
+        if len(coords_k) > 0:
+            # Sort the coordinates
+            coords_sorted = sorting_coords(coords_k, resolution)
+            # Assign z-values based on slice index and slice thickness
+            z = -(k) * slice_thickness
+            z_list = np.ones(coords_sorted.shape[0]) * z
+            # Combine x, y, z coordinates
+            coords_k_with_z = np.column_stack((coords_sorted, z_list))
+            coords.append(coords_k_with_z)
     return coords
 
-# % Getting shax bsplines from epi and endo masks
-def get_shax_from_coords(coords, resolution, slice_thickness, smooth_level):
-    # The smooth_level is based on the area enclosed by the epi/endo points and it should.
+def get_shax_from_coords(coords, smooth_level):
     warnings.filterwarnings(
         "ignore", category=RuntimeWarning, module="scipy.interpolate"
     )
-    K = len(coords)
     tck = []
-    for k in tqdm(range(K), desc="Creating SHAX Curves", ncols=100):
-        coord_k = coords[k]
-        coords_sorted = sorting_coords(coord_k, resolution)
-        # Adding the first point to the end to make it periodic
-        coords_sorted = np.vstack((coords_sorted, coords_sorted[0, :]))
-
-        # spline fitting
-        z = -(k) * slice_thickness
-        z_list = np.ones(coords_sorted.shape[0]) * z
-        area = calculate_area_points(coords_sorted)
-        tck_k, u_epi = splprep(
-            [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
+    for coord_k in tqdm(coords, desc="Creating SHAX Curves", ncols=100):
+        # Coordinates are already sorted and include z-values
+        # Add the first point to the end to make it periodic
+        coords_sorted = np.vstack((coord_k, coord_k[0, :]))
+        # Calculate area for smoothing
+        area = calculate_area_points(coords_sorted[:, :2])
+        # Spline fitting
+        tck_k, u = splprep(
+            [coords_sorted[:, 0], coords_sorted[:, 1], coords_sorted[:, 2]],
             s=smooth_level * area,
             per=True,
             k=3,
         )
-        tck.append(tck_k)        
+        tck.append(tck_k)
     return tck
 
 
