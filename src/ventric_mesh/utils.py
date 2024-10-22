@@ -650,3 +650,103 @@ def plotly_3d_base_splines(tck_layers, fig=None):
         )
     fig.update_layout(scene_camera=dict(eye=dict(x=2, y=2, z=2)))
     return fig
+
+
+
+def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo):
+    """
+    Plots the coords_epi, coords_endo, mesh_epi, and mesh_endo in Plotly.
+
+    Parameters:
+    - coords_epi: list of arrays, each array containing the coordinates from a slice.
+                  Each array is of shape (n_points, 3).
+    - coords_endo: list of arrays, similar to coords_epi.
+    - mesh_epi: mesh.Mesh object (from stl.mesh import Mesh)
+    - mesh_endo: mesh.Mesh object (from stl.mesh import Mesh)
+    """
+    import plotly.graph_objects as go
+    import numpy as np
+
+    fig = go.Figure()
+
+    # Plot coords_epi
+    for k in range(len(coords_epi)):
+        coords_k = coords_epi[k]
+        if len(coords_k) == 0:
+            continue
+        fig.add_trace(go.Scatter3d(
+            x=coords_k[:, 0],
+            y=coords_k[:, 1],
+            z=coords_k[:, 2],
+            mode='markers',
+            marker=dict(size=2, color='red'),
+            name=f'Coords Epi Slice {k}'
+        ))
+
+    # Plot coords_endo
+    for k in range(len(coords_endo)):
+        coords_k = coords_endo[k]
+        if len(coords_k) == 0:
+            continue
+        fig.add_trace(go.Scatter3d(
+            x=coords_k[:, 0],
+            y=coords_k[:, 1],
+            z=coords_k[:, 2],
+            mode='markers',
+            marker=dict(size=2, color='blue'),
+            name=f'Coords Endo Slice {k}'
+        ))
+
+    # Prepare mesh_epi for plotting
+    vertices_epi = mesh_epi.vectors.reshape(-1, 3)
+    # Remove duplicate vertices
+    vertices_epi_unique, index_unique_epi = np.unique(vertices_epi, axis=0, return_inverse=True)
+    faces_epi = index_unique_epi.reshape(-1, 3)
+
+    # Plot mesh_epi
+    fig.add_trace(go.Mesh3d(
+        x=vertices_epi_unique[:, 0],
+        y=vertices_epi_unique[:, 1],
+        z=vertices_epi_unique[:, 2],
+        i=faces_epi[:, 0],
+        j=faces_epi[:, 1],
+        k=faces_epi[:, 2],
+        color='red',
+        opacity=0.5,
+        name='Mesh Epi'
+    ))
+
+    # Prepare mesh_endo for plotting
+    vertices_endo = mesh_endo.vectors.reshape(-1, 3)
+    # Remove duplicate vertices
+    vertices_endo_unique, index_unique_endo = np.unique(vertices_endo, axis=0, return_inverse=True)
+    faces_endo = index_unique_endo.reshape(-1, 3)
+
+    # Plot mesh_endo
+    fig.add_trace(go.Mesh3d(
+        x=vertices_endo_unique[:, 0],
+        y=vertices_endo_unique[:, 1],
+        z=vertices_endo_unique[:, 2],
+        i=faces_endo[:, 0],
+        j=faces_endo[:, 1],
+        k=faces_endo[:, 2],
+        color='blue',
+        opacity=0.5,
+        name='Mesh Endo'
+    ))
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title='X',
+            yaxis_title='Y',
+            zaxis_title='Z'
+        ),
+        title='Coords and Mesh Visualization'
+    )
+
+    fig.show()
+
+
+
+
+
