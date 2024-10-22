@@ -1089,10 +1089,10 @@ def VentricMesh_delaunay(
     mesh_endo = create_mesh(vertices_endo, faces_endo)
     mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
     mesh_endo.save(mesh_endo_filename)
-    # mesh_base=create_mesh(vertices_base,faces_base)
-    # mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
-    # mesh_base.save(mesh_base_filename)
-    return mesh_merged
+    mesh_base=create_mesh(vertices_base,faces_base)
+    mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
+    mesh_base.save(mesh_base_filename)
+    return mesh_merged, mesh_epi, mesh_endo, mesh_base
 
 def VentricMesh_poisson(
     points_cloud_epi,
@@ -1137,7 +1137,7 @@ def VentricMesh_poisson(
     mesh_base.save(mesh_base_filename)
     output_mesh_filename = result_folder+'Mesh_3D.msh'
     generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename, MeshSizeMax=MeshSizeMax, MeshSizeMin=MeshSizeMin)
-    return mesh_merged
+    return mesh_merged, mesh_epi, mesh_endo, mesh_base
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
 # ----------------------------------------------------------------
