@@ -1026,13 +1026,13 @@ def NodeGenerator(
     smooth_lax_endo=0.8,
 ):
     mask_epi, mask_endo = get_endo_epi(mask)
-    coords_epi = get_coords_from_mask(mask_epi, resolution)
-    coords_endo = get_coords_from_mask(mask_endo, resolution)
+    coords_epi = get_coords_from_mask(mask_epi, resolution, slice_thickness)
+    coords_endo = get_coords_from_mask(mask_endo, resolution, slice_thickness)
     tck_epi = get_shax_from_coords(
-            coords_epi, resolution, slice_thickness, smooth_shax_epi
+            coords_epi, smooth_shax_epi
         )
     tck_endo = get_shax_from_coords(
-        coords_endo, resolution, slice_thickness, smooth_shax_endo
+        coords_endo, smooth_shax_endo
     )
     sample_points_epi = get_sample_points_from_shax(tck_epi, n_points_lax)
     sample_points_endo = get_sample_points_from_shax(tck_endo, n_points_lax)
