@@ -56,7 +56,7 @@ def test_meshing():
     num_mid_layers_base=1
 
     points_cloud_epi,points_cloud_endo, apex_k_epi, apex_k_endo=mu.NodeGenerator(mask,resolution,slice_thickness,seed_num_base_epi,seed_num_base_endo,num_z_sections_epi,num_z_sections_endo)
-    mesh=mu.VentricMesh_delaunay(points_cloud_epi,points_cloud_endo,num_mid_layers_base, apex_k_epi, apex_k_endo,save_flag=False,filename_suffix='test',result_folder='')
+    mesh, mesh_epi, mesh_endo, mesh_base=mu.VentricMesh_delaunay(points_cloud_epi,points_cloud_endo,num_mid_layers_base, apex_k_epi, apex_k_endo,save_flag=False,filename_suffix='test',result_folder='')
     aspect_ratios=mu.check_mesh_quality(mesh)
     num_large_aspect_ratio = sum(1 for ratio in aspect_ratios if ratio > 5)
     # check if more than 5% of the elements have very high aspect ratios 
