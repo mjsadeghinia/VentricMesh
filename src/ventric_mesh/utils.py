@@ -653,7 +653,7 @@ def plotly_3d_base_splines(tck_layers, fig=None):
 
 
 
-def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo):
+def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, fig=None):
     """
     Plots the coords_epi, coords_endo, mesh_epi, and mesh_endo in Plotly.
 
@@ -667,7 +667,10 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo):
     import plotly.graph_objects as go
     import numpy as np
 
-    fig = go.Figure()
+    # Check if figure is provided, else create a new one
+    if fig is None:
+        fig = go.Figure()
+    
 
     # Plot coords_epi
     for k in range(len(coords_epi)):
@@ -744,7 +747,7 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo):
         title='Coords and Mesh Visualization'
     )
 
-    fig.show()
+    return fig
 
 
 
