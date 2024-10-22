@@ -168,7 +168,7 @@ def get_weights_for_lax(K, weight_factor):
     return W_vector
 
 
-def get_lax_from_laxpoints(LAX_points, smooth_level):
+def get_lax_from_laxpoints(LAX_points, smooth_level, lax_spline_order=3):
     n_curves = len(LAX_points)
     tck = []
     for n in range(n_curves):
@@ -185,7 +185,7 @@ def get_lax_from_laxpoints(LAX_points, smooth_level):
             w=W_vector,
             s=smooth_level,
             per=False,
-            k=5,
+            k=lax_spline_order,
         )
         tck.append(tck_n)
     return tck
