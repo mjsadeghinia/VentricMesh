@@ -794,7 +794,7 @@ def create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers=1):
         num_points_epi, num_points_endo, num_mid_layers + 2, dtype=int
     )
     for n in range(len(num_points_layers)):
-        points = equally_spaced_points_on_spline(
+        points, normals = equally_spaced_points_on_spline(
             tck_layers[n], num_points_layers[n]
         )
         points[:, 2] = z_values[n]
