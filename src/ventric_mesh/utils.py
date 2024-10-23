@@ -849,7 +849,7 @@ def plot_error_histogram(errors, fname, color, xlim, ylim, title_prefix):
 def save_error_distribution_report(errors, file_path, n_bins=10, surface_name = ""):
     # Generate histogram data
     counts, bin_edges = np.histogram(errors, bins=n_bins, range=(np.min(errors), np.max(errors)))
-    file = open(file_path, 'a')
+    file = open(file_path, 'w')
     line = f"Original coords vs surface mesh error distribution report {surface_name}:"
     file.write(line + '\n')
     total_errors = len(errors)
