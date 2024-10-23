@@ -664,8 +664,6 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, fig=None)
     - mesh_epi: mesh.Mesh object (from stl.mesh import Mesh)
     - mesh_endo: mesh.Mesh object (from stl.mesh import Mesh)
     """
-    import plotly.graph_objects as go
-    import numpy as np
 
     # Check if figure is provided, else create a new one
     if fig is None:
@@ -750,6 +748,57 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, fig=None)
     return fig
 
 
+def calculate_error_between_coords_and_mesh(coords, stl_mesh):
+    import trimesh
+
+    # Extract vertices and faces
+    vectors = stl_mesh.vectors  # Shape (n_facets, 3, 3)
+    vertices = vectors.reshape(-1, 3)  # Flatten vertices
+    unique_vertices, indices = np.unique(vertices, axis=0, return_inverse=True)
+    faces = indices.reshape(-1, 3)
+
+    # Create a trimesh object
+    trimesh_mesh = trimesh.Trimesh(vertices=unique_vertices, faces=faces, process=False)
+
+    # Compute the signed distance from points to mesh
+    coords_array = np.vstack(coords)
+    distances = trimesh.proximity.signed_distance(trimesh_mesh, coords_array)
+
+    errors = np.abs(distances)
+    
+    return errors
 
 
+def plot_error_histogram(errors, fname, color, xlim, ylim, title_prefix):
 
+    avg_error = np.mean(errors)
+    std_error  = np.std(errors)
+    
+    # Plot error distribution histogram
+    plt.figure()
+    plt.hist(errors, bins=30, edgecolor='black', color=color)
+    plt.xlabel('Error')
+    plt.ylabel('Frequency')
+    plt.title(f'{title_prefix} Error Distribution (Avg: {avg_error:.2f} ± {std_error:.2f})')
+    plt.xlim(xlim)
+    plt.ylim(ylim)
+    plt.savefig(fname)
+    plt.close()
+
+def save_error_distribution_report(errors, file_path, n_bins=10, surface_name = ""):
+    # Generate histogram data
+    counts, bin_edges = np.histogram(errors, bins=n_bins, range=(np.min(errors), np.max(errors)))
+    file = open(file_path, 'a')
+    line = f"Original coords vs surface mesh error distribution report {surface_name}:"
+    file.write(line + '\n')
+    total_errors = len(errors)
+    cumulative_percentage = 0
+    for i in range(n_bins):
+        bin_count = counts[i]
+        bin_percentage = (bin_count / total_errors) * 100
+        cumulative_percentage += bin_percentage
+        line = (f"{bin_edges[i]:.4f} ≤ error < {bin_edges[i+1]:.4f} : "
+                f"{bin_count:>10} instances ({bin_percentage:6.2f}%), "
+                f"cumulative: {cumulative_percentage:6.2f}%")
+        file.write(line + '\n')
+    file.close()
