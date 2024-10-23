@@ -439,7 +439,7 @@ def create_apex_point_cloud(point_cloud, k, tck_shax, apex, seed_num_threshold):
     center = np.mean(last_slice_points, axis=0)
     center[2] = apex[2]  # Ensure the z-coordinate matches the apex
     check_apex_shift(apex, center)
-    
+    center_normals = np.mean(point_cloud[int(K*0.9)], axis=0)
     # Determine the number of intermediate slices between the last slice and the apex
     num_slices = 2
     apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
@@ -467,7 +467,7 @@ def create_apex_point_cloud(point_cloud, k, tck_shax, apex, seed_num_threshold):
         tck_apex_shax_k = tck_apex_shax[n]
         points, _ = equally_spaced_points_on_spline(tck_apex_shax_k, int(apex_seed_num_k))
         points[:, 2] = np.mean(points[:, 2])
-        normals = create_apex_normals(points, center)
+        normals = create_apex_normals(points, center_normals)
         points_apex.append(points)
         normals_apex.append(normals)
     
