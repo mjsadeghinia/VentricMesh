@@ -653,9 +653,9 @@ def plotly_3d_base_splines(tck_layers, fig=None):
 
 
 
-def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, fig=None):
+def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, plot_edges=True, fig=None):
     """
-    Plots the coords_epi, coords_endo, mesh_epi, and mesh_endo in Plotly.
+    Plots the coords_epi, coords_endo, mesh_epi, and mesh_endo in Plotly with line colors.
 
     Parameters:
     - coords_epi: list of arrays, each array containing the coordinates from a slice.
@@ -669,42 +669,40 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, fig=None)
     if fig is None:
         fig = go.Figure()
     
-
     # Plot coords_epi
-    for k in range(len(coords_epi)):
-        coords_k = coords_epi[k]
-        if len(coords_k) == 0:
+    for k, coords_k in enumerate(coords_epi):
+        if coords_k.shape[0] == 0:
             continue
         fig.add_trace(go.Scatter3d(
             x=coords_k[:, 0],
             y=coords_k[:, 1],
             z=coords_k[:, 2],
             mode='markers',
-            marker=dict(size=2, color='red'),
+            marker=dict(size=3, color='red'),
             name=f'Coords Epi Slice {k}'
         ))
 
     # Plot coords_endo
-    for k in range(len(coords_endo)):
-        coords_k = coords_endo[k]
-        if len(coords_k) == 0:
+    for k, coords_k in enumerate(coords_endo):
+        if coords_k.shape[0] == 0:
             continue
         fig.add_trace(go.Scatter3d(
             x=coords_k[:, 0],
             y=coords_k[:, 1],
             z=coords_k[:, 2],
             mode='markers',
-            marker=dict(size=2, color='blue'),
+            marker=dict(size=3, color='blue'),
             name=f'Coords Endo Slice {k}'
         ))
 
     # Prepare mesh_epi for plotting
-    vertices_epi = mesh_epi.vectors.reshape(-1, 3)
+    vectors_epi = mesh_epi.vectors  # Shape (n_facets, 3, 3)
+    vertices_epi = vectors_epi.reshape(-1, 3)
     # Remove duplicate vertices
     vertices_epi_unique, index_unique_epi = np.unique(vertices_epi, axis=0, return_inverse=True)
     faces_epi = index_unique_epi.reshape(-1, 3)
-
-    # Plot mesh_epi
+    
+    # Plot mesh_epi with faces
     fig.add_trace(go.Mesh3d(
         x=vertices_epi_unique[:, 0],
         y=vertices_epi_unique[:, 1],
@@ -714,16 +712,22 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, fig=None)
         k=faces_epi[:, 2],
         color='red',
         opacity=0.5,
-        name='Mesh Epi'
+        name='Mesh Epi',
+        flatshading=True
     ))
 
+    # Plot mesh_epi edges
+    if plot_edges:
+        fig = add_mesh_edges_to_figure(fig, vertices_epi_unique, faces_epi, line_color='black', name='Mesh Epi Edges')
+
     # Prepare mesh_endo for plotting
-    vertices_endo = mesh_endo.vectors.reshape(-1, 3)
+    vectors_endo = mesh_endo.vectors  # Shape (n_facets, 3, 3)
+    vertices_endo = vectors_endo.reshape(-1, 3)
     # Remove duplicate vertices
     vertices_endo_unique, index_unique_endo = np.unique(vertices_endo, axis=0, return_inverse=True)
     faces_endo = index_unique_endo.reshape(-1, 3)
-
-    # Plot mesh_endo
+    
+    # Plot mesh_endo with faces
     fig.add_trace(go.Mesh3d(
         x=vertices_endo_unique[:, 0],
         y=vertices_endo_unique[:, 1],
@@ -733,8 +737,13 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, fig=None)
         k=faces_endo[:, 2],
         color='blue',
         opacity=0.5,
-        name='Mesh Endo'
+        name='Mesh Endo',
+        flatshading=True
     ))
+
+    # Plot mesh_endo edges
+    if plot_edges:
+        fig = add_mesh_edges_to_figure(fig, vertices_endo_unique, faces_endo, line_color='black', name='Mesh Endo Edges')
 
     fig.update_layout(
         scene=dict(
@@ -742,10 +751,62 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, fig=None)
             yaxis_title='Y',
             zaxis_title='Z'
         ),
-        title='Coords and Mesh Visualization'
+        title='Coords and Mesh Visualization with Edge Lines'
     )
 
     return fig
+
+def add_mesh_edges_to_figure(fig, vertices, faces, line_color='black', name='Mesh Edges'):
+    """
+    Adds mesh edges as lines to the figure.
+
+    Parameters:
+    - fig: Plotly Figure object to add the edges to.
+    - vertices: Array of vertices, shape (n_vertices, 3).
+    - faces: Array of face indices, shape (n_faces, 3).
+    - line_color: Color of the lines.
+    - name: Name of the trace in the legend.
+    """
+    
+    # Create a set to store unique edges
+    edges = set()
+
+    # Iterate over faces and extract edges
+    for face in faces:
+        # For each face (triangle), get all edge pairs
+        edge_pairs = [(face[i], face[(i + 1) % 3]) for i in range(3)]
+        for edge in edge_pairs:
+            # Sort the vertices indices to avoid duplicates (e.g., (1,2) and (2,1))
+            sorted_edge = tuple(sorted(edge))
+            edges.add(sorted_edge)
+    
+    # Prepare lists to hold edge coordinates
+    x_edges = []
+    y_edges = []
+    z_edges = []
+
+    # Build the coordinates for the edges
+    for edge in edges:
+        x_coords = [vertices[edge[0], 0], vertices[edge[1], 0], None]
+        y_coords = [vertices[edge[0], 1], vertices[edge[1], 1], None]
+        z_coords = [vertices[edge[0], 2], vertices[edge[1], 2], None]
+        x_edges.extend(x_coords)
+        y_edges.extend(y_coords)
+        z_edges.extend(z_coords)
+
+    # Add the edges as a Scatter3d line trace
+    fig.add_trace(go.Scatter3d(
+        x=x_edges,
+        y=y_edges,
+        z=z_edges,
+        mode='lines',
+        line=dict(color=line_color, width=1),
+        name=name,
+        showlegend=False
+    ))
+
+    return fig
+
 
 
 def calculate_error_between_coords_and_mesh(coords, stl_mesh):
