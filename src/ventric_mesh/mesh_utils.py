@@ -1189,6 +1189,8 @@ def VentricMesh_poisson(
     mesh_base=create_mesh(vertices_base,faces_base)
     mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
     mesh_base.save(mesh_base_filename)
+    file_path=result_folder + "/Mesh_report.txt"
+    print_surface_mesh_quality_report(mesh_merged, file_path=file_path)
     return mesh_epi_filename, mesh_endo_filename, mesh_base_filename
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
@@ -1216,7 +1218,7 @@ def triangle_aspect_ratio(vertices):
     return np.max(lengths) / shortest_altitude * np.sqrt(3) / 2
 
 
-def check_mesh_quality(mesh_data, file_path=None):
+def print_surface_mesh_quality_report(mesh_data, file_path=None):
     """
     Get a mesh file and print out its quality metrics.
     """
@@ -1224,7 +1226,7 @@ def check_mesh_quality(mesh_data, file_path=None):
         file = open(file_path, 'w')
     else:
         file = None
-    line = "======= Mesh Statistics ======="
+    line = "======= Surface Mesh Statistics ======="
     print(line)
     if file:
         file.write(line + '\n')
@@ -1253,7 +1255,7 @@ def check_mesh_quality(mesh_data, file_path=None):
     print(line)
     if file:
         file.write(line + '\n')
-    line = "==============================="
+    line = "======================================"
     print(line)
     print(line)
     if file:
@@ -1263,7 +1265,7 @@ def check_mesh_quality(mesh_data, file_path=None):
 
 
 # %%
-def print_mesh_quality_report(n_bins, file_path=None):
+def print_3D_mesh_quality_report(n_bins, file_path=None):
     # Retrieve statistics about the mesh
     # num_elem=gmsh.model.mesh.getMaxElementTag()
     elem_tags = gmsh.model.mesh.getElementsByType(
@@ -1274,7 +1276,7 @@ def print_mesh_quality_report(n_bins, file_path=None):
     counts, bin_edges = np.histogram(q, bins=n_bins, range=(0, 1))
     
     if file_path is not None:
-        file = open(file_path, 'a')
+        file = open(file_path, 'w')
     else:
         file = None
     
@@ -1287,7 +1289,10 @@ def print_mesh_quality_report(n_bins, file_path=None):
         print(line)
         if file:
             file.write(line + '\n')
-
+    line = "==============================="
+    print(line)
+    if file:
+        file.write(line + '\n')
     if file is not None:
         file.close()
         
@@ -1315,10 +1320,7 @@ def generate_3d_mesh_from_stl(stl_path, mesh_path, MeshSizeMin=None, MeshSizeMax
     gmsh.model.mesh.Recombine3DAll = 0
     gmsh.model.mesh.generate(3)
     gmsh.write(mesh_path)
-    print("===============================")
-    print_mesh_quality_report(10, file_path=stl_path[:-4]+'_report.txt')
-    print("===============================")
-    print("===============================")
+    print_3D_mesh_quality_report(10, file_path=stl_path[:-4]+'_report.txt')
     gmsh.finalize()
 
 
@@ -1361,9 +1363,7 @@ def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, me
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
     # Save the mesh to the specified file
-    print("===============================")
     gmsh.write(output_mesh_filename)
-    print_mesh_quality_report(10, file_path=output_mesh_filename[:-4]+'_report.txt')
-    print("===============================")
+    print_3D_mesh_quality_report(10, file_path=output_mesh_filename[:-4]+'_report.txt')
     # Finalize Gmsh
     gmsh.finalize()
