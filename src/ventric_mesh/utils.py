@@ -836,27 +836,41 @@ def calculate_error_between_coords_and_mesh(coords, stl_mesh_filename):
     return errors
 
 
-def plot_error_histogram(errors, fname, color, xlim, ylim, title_prefix):
+def plot_error_histogram(errors, fname, color, xlim, ylim, title_prefix, resolution=""):
 
     avg_error = np.mean(errors)
     std_error  = np.std(errors)
-    
+    if not resolution == "":
+        resolution = np.round(resolution,3)
+        line = f'{title_prefix} Error Distribution (Avg: {avg_error:.2f} ± {std_error:.2f}) - (Data Res:{resolution}) '
+    else:
+        line = f'{title_prefix} Error Distribution (Avg: {avg_error:.2f} ± {std_error:.2f})'
     # Plot error distribution histogram
     plt.figure()
     plt.hist(errors, bins=30, edgecolor='black', color=color)
     plt.xlabel('Error')
     plt.ylabel('Frequency')
-    plt.title(f'{title_prefix} Error Distribution (Avg: {avg_error:.2f} ± {std_error:.2f})')
+    plt.title(line)
     plt.xlim(xlim)
     plt.ylim(ylim)
     plt.savefig(fname)
     plt.close()
 
-def save_error_distribution_report(errors, file_path, n_bins=10, surface_name = ""):
+def save_error_distribution_report(errors, file_path, n_bins=10, surface_name = "", resolution=""):
     # Generate histogram data
     counts, bin_edges = np.histogram(errors, bins=n_bins, range=(np.min(errors), np.max(errors)))
     file = open(file_path, 'w')
-    line = f"Original coords vs surface mesh error distribution report {surface_name}:"
+    line = "======= Mesh Statistics ======="
+    file.write(line + '\n')
+    if not surface_name == "":
+        line = f"{surface_name}"
+        if not resolution == "":
+            resolution = np.round(resolution,3)
+            line = f"{surface_name} with image resolution of {resolution}"
+        file.write(line + '\n')
+    line = f"Original coords vs surface mesh error distribution report:"
+    file.write(line + '\n')
+    line = "-------------------------------"
     file.write(line + '\n')
     total_errors = len(errors)
     cumulative_percentage = 0
