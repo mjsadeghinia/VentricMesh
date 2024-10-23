@@ -653,7 +653,7 @@ def plotly_3d_base_splines(tck_layers, fig=None):
 
 
 
-def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, plot_edges=True, fig=None):
+def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi_filename, mesh_endo_filename, plot_edges=True, fig=None):
     """
     Plots the coords_epi, coords_endo, mesh_epi, and mesh_endo in Plotly with line colors.
 
@@ -664,7 +664,11 @@ def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi, mesh_endo, plot_edge
     - mesh_epi: mesh.Mesh object (from stl.mesh import Mesh)
     - mesh_endo: mesh.Mesh object (from stl.mesh import Mesh)
     """
-
+    from stl import mesh
+    
+    mesh_epi = mesh.Mesh.from_file(mesh_epi_filename)
+    mesh_endo = mesh.Mesh.from_file(mesh_endo_filename)
+    
     # Check if figure is provided, else create a new one
     if fig is None:
         fig = go.Figure()
@@ -809,9 +813,11 @@ def add_mesh_edges_to_figure(fig, vertices, faces, line_color='black', name='Mes
 
 
 
-def calculate_error_between_coords_and_mesh(coords, stl_mesh):
+def calculate_error_between_coords_and_mesh(coords, stl_mesh_filename):
     import trimesh
-
+    from stl import mesh
+    
+    stl_mesh = mesh.Mesh.from_file(stl_mesh_filename)
     # Extract vertices and faces
     vectors = stl_mesh.vectors  # Shape (n_facets, 3, 3)
     vertices = vectors.reshape(-1, 3)  # Flatten vertices

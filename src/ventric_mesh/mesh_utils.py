@@ -1101,8 +1101,6 @@ def VentricMesh_poisson(
     num_mid_layers_base,
     SurfaceMeshSizeEpi=1,
     SurfaceMeshSizeEndo=1,
-    MeshSizeMax=None, 
-    MeshSizeMin=None,
     save_flag=True,
     filename_suffix="",
     result_folder="",
@@ -1136,9 +1134,7 @@ def VentricMesh_poisson(
     mesh_base=create_mesh(vertices_base,faces_base)
     mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
     mesh_base.save(mesh_base_filename)
-    output_mesh_filename = result_folder+'Mesh_3D.msh'
-    generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename, MeshSizeMax=MeshSizeMax, MeshSizeMin=MeshSizeMin)
-    return mesh_merged, mesh_epi, mesh_endo, mesh_base
+    return mesh_epi_filename, mesh_endo_filename, mesh_base_filename
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
 # ----------------------------------------------------------------
