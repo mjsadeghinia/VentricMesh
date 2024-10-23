@@ -63,41 +63,42 @@ def get_endo_epi(mask):
 # ----------------------------------------------------------------
 # ------------ Creating BSplines and Smooth Contours -------------
 # ----------------------------------------------------------------
-def get_coords_from_mask(mask, resolution):
+def get_coords_from_mask(mask, resolution, slice_thickness):
     K, I, _ = mask.shape
     coords = []
     for k in range(K):
         img = mask[k, :, :]
         coords_k = coords_from_img(img, resolution)
-        if len(coords_k)>0:
-            coords.append(coords_k)
+        if len(coords_k) > 0:
+            # Sort the coordinates
+            coords_sorted = sorting_coords(coords_k, resolution)
+            # Assign z-values based on slice index and slice thickness
+            z = -(k) * slice_thickness
+            z_list = np.ones(coords_sorted.shape[0]) * z
+            # Combine x, y, z coordinates
+            coords_k_with_z = np.column_stack((coords_sorted, z_list))
+            coords.append(coords_k_with_z)
     return coords
 
-# % Getting shax bsplines from epi and endo masks
-def get_shax_from_coords(coords, resolution, slice_thickness, smooth_level):
-    # The smooth_level is based on the area enclosed by the epi/endo points and it should.
+def get_shax_from_coords(coords, smooth_level):
     warnings.filterwarnings(
         "ignore", category=RuntimeWarning, module="scipy.interpolate"
     )
-    K = len(coords)
     tck = []
-    for k in tqdm(range(K), desc="Creating SHAX Curves", ncols=100):
-        coord_k = coords[k]
-        coords_sorted = sorting_coords(coord_k, resolution)
-        # Adding the first point to the end to make it periodic
-        coords_sorted = np.vstack((coords_sorted, coords_sorted[0, :]))
-
-        # spline fitting
-        z = -(k) * slice_thickness
-        z_list = np.ones(coords_sorted.shape[0]) * z
-        area = calculate_area_points(coords_sorted)
-        tck_k, u_epi = splprep(
-            [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
+    for coord_k in tqdm(coords, desc="Creating SHAX Curves", ncols=100):
+        # Coordinates are already sorted and include z-values
+        # Add the first point to the end to make it periodic
+        coords_sorted = np.vstack((coord_k, coord_k[0, :]))
+        # Calculate area for smoothing
+        area = calculate_area_points(coords_sorted[:, :2])
+        # Spline fitting
+        tck_k, u = splprep(
+            [coords_sorted[:, 0], coords_sorted[:, 1], coords_sorted[:, 2]],
             s=smooth_level * area,
             per=True,
             k=3,
         )
-        tck.append(tck_k)        
+        tck.append(tck_k)
     return tck
 
 
@@ -1025,13 +1026,13 @@ def NodeGenerator(
     smooth_lax_endo=0.8,
 ):
     mask_epi, mask_endo = get_endo_epi(mask)
-    coords_epi = get_coords_from_mask(mask_epi, resolution)
-    coords_endo = get_coords_from_mask(mask_endo, resolution)
+    coords_epi = get_coords_from_mask(mask_epi, resolution, slice_thickness)
+    coords_endo = get_coords_from_mask(mask_endo, resolution, slice_thickness)
     tck_epi = get_shax_from_coords(
-            coords_epi, resolution, slice_thickness, smooth_shax_epi
+            coords_epi, smooth_shax_epi
         )
     tck_endo = get_shax_from_coords(
-        coords_endo, resolution, slice_thickness, smooth_shax_endo
+        coords_endo, smooth_shax_endo
     )
     sample_points_epi = get_sample_points_from_shax(tck_epi, n_points_lax)
     sample_points_endo = get_sample_points_from_shax(tck_endo, n_points_lax)
@@ -1089,10 +1090,10 @@ def VentricMesh_delaunay(
     mesh_endo = create_mesh(vertices_endo, faces_endo)
     mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
     mesh_endo.save(mesh_endo_filename)
-    # mesh_base=create_mesh(vertices_base,faces_base)
-    # mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
-    # mesh_base.save(mesh_base_filename)
-    return mesh_merged
+    mesh_base=create_mesh(vertices_base,faces_base)
+    mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
+    mesh_base.save(mesh_base_filename)
+    return mesh_merged, mesh_epi, mesh_endo, mesh_base
 
 def VentricMesh_poisson(
     points_cloud_epi,
@@ -1137,7 +1138,7 @@ def VentricMesh_poisson(
     mesh_base.save(mesh_base_filename)
     output_mesh_filename = result_folder+'Mesh_3D.msh'
     generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename, MeshSizeMax=MeshSizeMax, MeshSizeMin=MeshSizeMin)
-    return mesh_merged
+    return mesh_merged, mesh_epi, mesh_endo, mesh_base
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
 # ----------------------------------------------------------------
