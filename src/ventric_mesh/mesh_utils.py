@@ -1106,10 +1106,10 @@ def NodeGenerator(
         tck_lax_endo, apex_endo, num_z_sections_endo, z_sections_flag_endo
     )
     points_cloud_endo, k_apex_endo = create_point_cloud(
-    tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=8
+    tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=25
     )
     points_cloud_epi, k_apex_epi = create_point_cloud(
-        tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=8
+        tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=25
     )
     # Calculate normals
     normals_list_endo = calculate_normals(points_cloud_endo)
@@ -1174,16 +1174,32 @@ def VentricMesh_poisson(
         stacked_points_epi, stacked_normals_epi, mesh_size=SurfaceMeshSizeEpi,
         output_folder=result_folder, fname_suffix='epi'
     )
+    mesh_epi = create_mesh(vertices_epi, faces_epi)
+    if save_flag:
+        mesh_epi_filename = result_folder + "Mesh_epi_" + filename_suffix + ".stl"
+        mesh_epi.save(mesh_epi_filename)
+    
+    
     vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(
         stacked_points_endo, stacked_normals_endo, mesh_size=SurfaceMeshSizeEndo,
         output_folder=result_folder, fname_suffix='endo'
     )
+    mesh_endo = create_mesh(vertices_endo, faces_endo)
+    if save_flag:
+        mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
+        mesh_endo.save(mesh_endo_filename)
+    
     base_endo = get_base_from_vertices(vertices_endo)
     base_epi = get_base_from_vertices(vertices_epi)
     points_cloud_base = create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers_base)
     points_cloud_base[0] = base_epi
     points_cloud_base[-1] = base_endo
     vertices_base, faces_base = create_base_mesh(points_cloud_base)
+    mesh_base=create_mesh(vertices_base,faces_base)
+    if save_flag:
+        mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
+        mesh_base.save(mesh_base_filename)
+    
     mesh_merged = merge_meshes(
         vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo
     )
@@ -1193,15 +1209,6 @@ def VentricMesh_poisson(
         mesh_merged_filename = result_folder + "Mesh_" + filename_suffix + ".stl"
     if save_flag:
         mesh_merged.save(mesh_merged_filename)
-    mesh_epi = create_mesh(vertices_epi, faces_epi)
-    mesh_epi_filename = result_folder + "Mesh_epi_" + filename_suffix + ".stl"
-    mesh_epi.save(mesh_epi_filename)
-    mesh_endo = create_mesh(vertices_endo, faces_endo)
-    mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
-    mesh_endo.save(mesh_endo_filename)
-    mesh_base=create_mesh(vertices_base,faces_base)
-    mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
-    mesh_base.save(mesh_base_filename)
     file_path=result_folder + "/Mesh_report.txt"
     print_surface_mesh_quality_report(mesh_merged, file_path=file_path)
     return mesh_epi_filename, mesh_endo_filename, mesh_base_filename
