@@ -283,16 +283,7 @@ def equally_spaced_points_on_spline(tck_k, N):
     x, y, z = splev(equally_spaced_t_values, tck_k)
     points_equal_spaced = np.vstack((x, y, z)).T
 
-    # Compute the centroid of the points
-    centroid = np.mean(points_equal_spaced, axis=0)
-
-    # Compute normal vectors as (point - centroid)
-    normals = points_equal_spaced - centroid
-    # Normalize the normals
-    norms = np.linalg.norm(normals, axis=1)
-    normals = normals / norms[:, np.newaxis]
-
-    return points_equal_spaced, normals
+    return points_equal_spaced
 
 
 def check_apex_change(apex, center):
@@ -461,26 +452,26 @@ def create_apex_point_cloud(point_cloud, k, tck_shax, apex, seed_num_threshold):
     
     # Initialize lists to collect apex points and normals
     points_apex = []
-    normals_apex = []
+    # normals_apex = []
     
     for n, apex_seed_num_k in enumerate(apex_seed_num[1:]):
         tck_apex_shax_k = tck_apex_shax[n]
-        points, _ = equally_spaced_points_on_spline(tck_apex_shax_k, int(apex_seed_num_k))
+        points = equally_spaced_points_on_spline(tck_apex_shax_k, int(apex_seed_num_k))
         points[:, 2] = np.mean(points[:, 2])
         normals = create_apex_normals(points, center_normals)
         points_apex.append(points)
-        normals_apex.append(normals)
+        # normals_apex.append(normals)
     
     # Add the apex center point
     points_apex.append(center.reshape(1, -1))
     # For the apex point, set the normal to point upwards along the z-axis
-    normals_apex.append(np.array([[0, 0, 1]]))
+    # normals_apex.append(np.array([[0, 0, 1]]))
     
-    # Concatenate all points and normals
-    points_apex = np.concatenate(points_apex, axis=0)
-    normals_apex = np.concatenate(normals_apex, axis=0)
+    # # Concatenate all points and normals
+    # points_apex = np.concatenate(points_apex, axis=0)
+    # normals_apex = np.concatenate(normals_apex, axis=0)
     
-    return points_apex, normals_apex
+    return points_apex
 
 
     # fig = go.Figure()
@@ -544,7 +535,6 @@ def third_order_interpolate(start_point, end_point, num_point):
 
 def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
     point_cloud = []
-    normals_list = []
     k_apex = 0
     K = len(tck_shax)
     area_shax = np.zeros(K)
@@ -555,29 +545,42 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
         seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
         if seed_num_k < seed_num_threshold:
             k_apex = k if k_apex == 0 else k_apex
-            points_apex, normals_apex = create_apex_point_cloud(
+            points_apex = create_apex_point_cloud(
                 point_cloud, k, tck_shax, apex, seed_num_threshold
             )
-            point_cloud.append(points_apex)
-            normals_list.append(normals_apex)
+            point_cloud.extend(points_apex)
             break
         else:
-            points, normals = equally_spaced_points_on_spline(tck_k, seed_num_k)
+            points = equally_spaced_points_on_spline(tck_k, seed_num_k)
             # Ensuring that base is always at z=0
             if k == 0:
                 points[:, 2] = 0
             else:
                 points[:, 2] = np.mean(points[:, 2])
             point_cloud.append(points)
-            normals_list.append(normals)
     
-    # Concatenate all points and normals
-    point_cloud = np.concatenate(point_cloud, axis=0)
-    normals = np.concatenate(normals_list, axis=0)
+    return point_cloud, k_apex
+
+def calculate_normals(point_cloud, apex_threshold = 20):
+    normals_list = []
+    # Compute the centroid of all the points
+    num_layers = len(point_cloud)
+    apex_ind = int(num_layers * apex_threshold / 100)
+    all_points = np.vstack(point_cloud)
+    centroid_all = np.mean(all_points, axis=0)
     
-    return point_cloud, k_apex, normals
-
-
+    for i, points in enumerate(point_cloud):
+        if i < num_layers - 10:
+            centroid_layer = np.mean(points, axis=0)
+            normals = points - centroid_layer
+        else:
+            # Middle layers: normals = point - centroid of all points
+            normals = points - centroid_all
+        # Normalize the normals
+        norms = np.linalg.norm(normals, axis=1)
+        normals = normals / norms[:, np.newaxis]
+        normals_list.append(normals)
+    return normals_list
 
 
 # ----------------------------------------------------------------
@@ -794,7 +797,7 @@ def create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers=1):
         num_points_epi, num_points_endo, num_mid_layers + 2, dtype=int
     )
     for n in range(len(num_points_layers)):
-        points, normals = equally_spaced_points_on_spline(
+        points = equally_spaced_points_on_spline(
             tck_layers[n], num_points_layers[n]
         )
         points[:, 2] = z_values[n]
@@ -1102,13 +1105,16 @@ def NodeGenerator(
     tck_shax_endo = get_shax_from_lax(
         tck_lax_endo, apex_endo, num_z_sections_endo, z_sections_flag_endo
     )
-    points_cloud_endo, k_apex_endo, normals_endo = create_point_cloud(
-        tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=8
+    points_cloud_endo, k_apex_endo = create_point_cloud(
+    tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=8
     )
-    points_cloud_epi, k_apex_epi, normals_epi =  create_point_cloud(
+    points_cloud_epi, k_apex_epi = create_point_cloud(
         tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=8
     )
-    return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo, normals_epi, normals_endo
+    # Calculate normals
+    normals_list_endo = calculate_normals(points_cloud_endo)
+    normals_list_epi = calculate_normals(points_cloud_epi)
+    return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo, normals_list_epi, normals_list_endo
 
 
 def VentricMesh_delaunay(
@@ -1152,19 +1158,26 @@ def VentricMesh_poisson(
     num_mid_layers_base,
     SurfaceMeshSizeEpi=1,
     SurfaceMeshSizeEndo=1,
-    normals_epi = None,
-    normals_endo = None,
+    normals_list_epi = None,
+    normals_list_endo = None,
     save_flag=True,
     filename_suffix="",
     result_folder="",
 ):
-    stacked_points_epi = np.vstack(points_cloud_epi)
-    stacked_normals_epi = np.vstack(normals_epi)
+    # Stack points and normals
     stacked_points_endo = np.vstack(points_cloud_endo)
-    stacked_normals_endo= np.vstack(normals_endo)
-    vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(stacked_points_epi, stacked_normals_epi, mesh_size=SurfaceMeshSizeEpi, output_folder=result_folder, fname_suffix='epi')
-    vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(stacked_points_endo, stacked_normals_endo, mesh_size=SurfaceMeshSizeEndo, output_folder=result_folder, fname_suffix='endo')
-    
+    stacked_normals_endo = np.vstack(normals_list_endo)
+    stacked_points_epi = np.vstack(points_cloud_epi)
+    stacked_normals_epi = np.vstack(normals_list_epi)
+    # Generate surface meshes
+    vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(
+        stacked_points_epi, stacked_normals_epi, mesh_size=SurfaceMeshSizeEpi,
+        output_folder=result_folder, fname_suffix='epi'
+    )
+    vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(
+        stacked_points_endo, stacked_normals_endo, mesh_size=SurfaceMeshSizeEndo,
+        output_folder=result_folder, fname_suffix='endo'
+    )
     base_endo = get_base_from_vertices(vertices_endo)
     base_epi = get_base_from_vertices(vertices_epi)
     points_cloud_base = create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers_base)
