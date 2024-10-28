@@ -1120,8 +1120,8 @@ def NodeGenerator(
         tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=25
     )
     # Calculate normals
-    normals_list_endo = calculate_normals(points_cloud_endo)
-    normals_list_epi = calculate_normals(points_cloud_epi)
+    normals_list_endo = calculate_normals(points_cloud_endo, k_apex_endo)
+    normals_list_epi = calculate_normals(points_cloud_epi, k_apex_epi)
     return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo, normals_list_epi, normals_list_endo
 
 
