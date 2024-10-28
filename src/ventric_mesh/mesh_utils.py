@@ -63,41 +63,42 @@ def get_endo_epi(mask):
 # ----------------------------------------------------------------
 # ------------ Creating BSplines and Smooth Contours -------------
 # ----------------------------------------------------------------
-def get_coords_from_mask(mask, resolution):
+def get_coords_from_mask(mask, resolution, slice_thickness):
     K, I, _ = mask.shape
     coords = []
     for k in range(K):
         img = mask[k, :, :]
         coords_k = coords_from_img(img, resolution)
-        if len(coords_k)>0:
-            coords.append(coords_k)
+        if len(coords_k) > 0:
+            # Sort the coordinates
+            coords_sorted = sorting_coords(coords_k, resolution)
+            # Assign z-values based on slice index and slice thickness
+            z = -(k) * slice_thickness
+            z_list = np.ones(coords_sorted.shape[0]) * z
+            # Combine x, y, z coordinates
+            coords_k_with_z = np.column_stack((coords_sorted, z_list))
+            coords.append(coords_k_with_z)
     return coords
 
-# % Getting shax bsplines from epi and endo masks
-def get_shax_from_coords(coords, resolution, slice_thickness, smooth_level):
-    # The smooth_level is based on the area enclosed by the epi/endo points and it should.
+def get_shax_from_coords(coords, smooth_level):
     warnings.filterwarnings(
         "ignore", category=RuntimeWarning, module="scipy.interpolate"
     )
-    K = len(coords)
     tck = []
-    for k in tqdm(range(K), desc="Creating SHAX Curves", ncols=100):
-        coord_k = coords[k]
-        coords_sorted = sorting_coords(coord_k, resolution)
-        # Adding the first point to the end to make it periodic
-        coords_sorted = np.vstack((coords_sorted, coords_sorted[0, :]))
-
-        # spline fitting
-        z = -(k) * slice_thickness
-        z_list = np.ones(coords_sorted.shape[0]) * z
-        area = calculate_area_points(coords_sorted)
-        tck_k, u_epi = splprep(
-            [coords_sorted[:, 0], coords_sorted[:, 1], z_list],
+    for coord_k in tqdm(coords, desc="Creating SHAX Curves", ncols=100):
+        # Coordinates are already sorted and include z-values
+        # Add the first point to the end to make it periodic
+        coords_sorted = np.vstack((coord_k, coord_k[0, :]))
+        # Calculate area for smoothing
+        area = calculate_area_points(coords_sorted[:, :2])
+        # Spline fitting
+        tck_k, u = splprep(
+            [coords_sorted[:, 0], coords_sorted[:, 1], coords_sorted[:, 2]],
             s=smooth_level * area,
             per=True,
             k=3,
         )
-        tck.append(tck_k)        
+        tck.append(tck_k)
     return tck
 
 
@@ -168,7 +169,7 @@ def get_weights_for_lax(K, weight_factor):
     return W_vector
 
 
-def get_lax_from_laxpoints(LAX_points, smooth_level):
+def get_lax_from_laxpoints(LAX_points, smooth_level, lax_spline_order=3):
     n_curves = len(LAX_points)
     tck = []
     for n in range(n_curves):
@@ -185,7 +186,7 @@ def get_lax_from_laxpoints(LAX_points, smooth_level):
             w=W_vector,
             s=smooth_level,
             per=False,
-            k=5,
+            k=lax_spline_order,
         )
         tck.append(tck_n)
     return tck
@@ -258,28 +259,30 @@ def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0):
 
 
 def equally_spaced_points_on_spline(tck_k, N):
-    # Evaluate the spline over a fine grid
+    # Evaluate the spline over a fine grid to get cumulative arc length
     n_points = 1000
     t = np.linspace(0, 1, n_points)
     x, y, z = splev(t, tck_k)
     points = np.vstack((x, y, z)).T
+
     # Compute the cumulative arc length at each point
     diff_points = np.diff(points, axis=0)
-    arc_lengths = np.sqrt(
-        diff_points[:, 0] ** 2 + diff_points[:, 1] ** 2 + diff_points[:, 2] ** 2
-    )
+    arc_lengths = np.sqrt((diff_points ** 2).sum(axis=1))
     cumulative_lengths = np.zeros(n_points)
     cumulative_lengths[1:] = np.cumsum(arc_lengths)
     total_length = cumulative_lengths[-1]
     segment_length = total_length / N
-    # Find the t values that correspond to the segments with this segment lengths
+
+    # Find the t values that correspond to the segments with equal lengths
     equally_spaced_t_values = np.zeros(N)
     for i in range(N):
         target_length = i * segment_length
         idx = np.where(cumulative_lengths >= target_length)[0][0]
         equally_spaced_t_values[i] = t[idx]
+
     x, y, z = splev(equally_spaced_t_values, tck_k)
     points_equal_spaced = np.vstack((x, y, z)).T
+
     return points_equal_spaced
 
 
@@ -412,42 +415,64 @@ def find_midpoints(last_slice_points, center, m):
         mid_points.append(interpolated_points)
     return mid_points
 
+def create_apex_normals(points, center):
+    # Compute normal vectors as (point - centroid)
+    normals = points - center
+    # Normalize the normals
+    norms = np.linalg.norm(normals, axis=1)
+    normals = normals / norms[:, np.newaxis]
+    return normals
 
 def create_apex_point_cloud(point_cloud, k, tck_shax, apex, seed_num_threshold):
     K = len(tck_shax)
     num_points_last_slice = point_cloud[k - 1].shape[0]
     last_slice_points = point_cloud[k - 1]
     center = np.mean(last_slice_points, axis=0)
-    center[2] = apex[2]
+    center[2] = apex[2]  # Ensure the z-coordinate matches the apex
     check_apex_shift(apex, center)
-    # if the area is too big it should be scale so more intermediatry slices are considerd
+    # center_normals = np.mean(point_cloud[int(K*0.9)], axis=0)
+    # Determine the number of intermediate slices between the last slice and the apex
     num_slices = 2
     apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
     iter = 0
-    while apex_seed_num[-2]-apex_seed_num[-1]>4 and iter<5:
+    while apex_seed_num[-2] - apex_seed_num[-1] > 4 and iter < 5:
         num_slices += 1
         iter += 1
         apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
-    if iter==5:    
-        logger.warning('Number of apex shax may not be sufficient, it is advised to decrease the seed_num_threshold')
-
+    if iter == 5:
+        logger.warning('Number of apex short-axis slices may not be sufficient; it is advised to decrease the seed_num_threshold')
+    
     m = len(apex_seed_num) - 1
     old_shax_points = find_midpoints(last_slice_points, center, m)
-
+    
     z_last_section = old_shax_points[0][0, 2]
     z_apex = center[2]
     z_sections = third_order_interpolate(z_last_section, z_apex, num_slices)[1:]
     tck_apex_shax = create_apex_shax(old_shax_points[1:], z_sections)
-
+    
+    # Initialize lists to collect apex points and normals
+    points_apex = []
+    # normals_apex = []
+    
     for n, apex_seed_num_k in enumerate(apex_seed_num[1:]):
         tck_apex_shax_k = tck_apex_shax[n]
         points = equally_spaced_points_on_spline(tck_apex_shax_k, int(apex_seed_num_k))
         points[:, 2] = np.mean(points[:, 2])
-        point_cloud.append(points)
+        # normals = create_apex_normals(points, center_normals)
+        points_apex.append(points)
+        # normals_apex.append(normals)
+    
+    # Add the apex center point
+    points_apex.append(center.reshape(1, -1))
+    # For the apex point, set the normal to point upwards along the z-axis
+    # normals_apex.append(np.array([[0, 0, 1]]))
+    
+    # # Concatenate all points and normals
+    # points_apex = np.concatenate(points_apex, axis=0)
+    # normals_apex = np.concatenate(normals_apex, axis=0)
+    
+    return points_apex
 
-    point_cloud.append(center)
-
-    return point_cloud
 
     # fig = go.Figure()
     # for n in range(len(apex_tck_lax[0])):
@@ -513,26 +538,57 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
     k_apex = 0
     K = len(tck_shax)
     area_shax = np.zeros(K)
-    for k in tqdm(range(K), desc="Creating pointcloud for mesh generation", ncols=100):
+    
+    for k in tqdm(range(K), desc="Creating point cloud for mesh generation", ncols=100):
         tck_k = tck_shax[k]
         area_shax[k] = calculate_area_b_spline(tck_k)
         seed_num_k = int(np.cbrt(area_shax[k] / area_shax[0]) * seed_num_base)
         if seed_num_k < seed_num_threshold:
             k_apex = k if k_apex == 0 else k_apex
-            point_cloud = create_apex_point_cloud(
+            points_apex = create_apex_point_cloud(
                 point_cloud, k, tck_shax, apex, seed_num_threshold
             )
+            point_cloud.extend(points_apex)
             break
         else:
             points = equally_spaced_points_on_spline(tck_k, seed_num_k)
-            # ensuring that base is always at z=0
+            # Ensuring that base is always at z=0
             if k == 0:
                 points[:, 2] = 0
             else:
                 points[:, 2] = np.mean(points[:, 2])
             point_cloud.append(points)
-
+    
     return point_cloud, k_apex
+
+def calculate_normals(point_cloud, apex_ind):
+    normals_list = []
+    num_layers = len(point_cloud)
+    
+    # Define the centroid of points in the (almost, offsetted by 90%) last slice before the apex
+    apex_centeroid_ind = int(0.9 * apex_ind)
+    apex_centeroid_points = np.vstack(point_cloud[apex_centeroid_ind])
+    apex_centeroid = np.mean(apex_centeroid_points, axis=0)
+    
+    for i, points in enumerate(point_cloud):
+        if i < apex_ind:
+            # Calculate centroid for layers below the apex
+            centroid_layer = np.mean(points, axis=0)
+            normals = points - centroid_layer
+        elif i < num_layers - 1:
+            # Use the centroid of the last slice for layers between apex and the top
+            normals = points - apex_centeroid
+        else:
+            # Assign upward normal vector to the top layer
+            normals_list.append(np.array([[0, 0, 1]] * len(points)))
+            break
+        
+        # Normalize normals
+        norms = np.linalg.norm(normals, axis=1, keepdims=True)
+        normals = normals / norms
+        normals_list.append(normals)
+    
+    return normals_list
 
 
 # ----------------------------------------------------------------
@@ -812,24 +868,27 @@ def merge_meshes(
 # ----------------------------------------------------------------
 # ----- Poisson surface reconstruction and mesh generation  ------
 # ----------------------------------------------------------------
-def make_open3d_point_cloud(points: np.array):
+def make_open3d_point_cloud(points: np.array, normals: np.array = None):
     # Create an Open3D point cloud from the numpy array
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
-
+    if normals is not None:
+        pcd.normals = o3d.utility.Vector3dVector(normals)
     return pcd
 
-def preprocess_point_cloud(pcd, k=10):
+def preprocess_point_cloud(pcd, k=10, estimate_normals=False):
     """
-    Preprocess the point cloud: estimate normals and orient them consistently.
+    Preprocess the point cloud: optionally estimate normals and orient them consistently.
     """
-    # Estimate normals
-    pcd.estimate_normals()
+    if estimate_normals:
+        # Estimate normals
+        pcd.estimate_normals()
 
     # Orient normals consistently
     pcd.orient_normals_consistent_tangent_plane(k=k)
 
     return pcd
+
 
 def create_surface_mesh(pcd):
     """
@@ -953,12 +1012,16 @@ def remesh_surface(stl_fname, mesh_size=1):
         gmsh.finalize()
         
         
-def generate_surface_mesh_from_pointclouds(points_cloud, mesh_size=1, output_folder="output", fname_suffix=''):
+def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, output_folder="output", fname_suffix=''):
     logger.info(f'{fname_suffix} points cloud are being preprocessed ...')
-    pcd = make_open3d_point_cloud(points_cloud)
-    # Preprocess the point cloud
-    pcd = preprocess_point_cloud(pcd)
-    logger.info(f'{fname_suffix} points cloud normals are estimated')
+    pcd = make_open3d_point_cloud(points_cloud, normals)
+    # Preprocess the point cloud without estimating normals
+    if normals is not None:
+        estimate_normals=False
+    else:
+        estimate_normals=True
+    pcd = preprocess_point_cloud(pcd, estimate_normals=estimate_normals)
+    logger.info(f'{fname_suffix} points cloud normals are set from spline derivatives')
     # Create surface mesh from point cloud
     mesh = create_surface_mesh(pcd)
     logger.info(f'{fname_suffix} initial surface is reconstructed based on Poisson surface reconstruction')
@@ -1025,13 +1088,13 @@ def NodeGenerator(
     smooth_lax_endo=0.8,
 ):
     mask_epi, mask_endo = get_endo_epi(mask)
-    coords_epi = get_coords_from_mask(mask_epi, resolution)
-    coords_endo = get_coords_from_mask(mask_endo, resolution)
+    coords_epi = get_coords_from_mask(mask_epi, resolution, slice_thickness)
+    coords_endo = get_coords_from_mask(mask_endo, resolution, slice_thickness)
     tck_epi = get_shax_from_coords(
-            coords_epi, resolution, slice_thickness, smooth_shax_epi
+            coords_epi, smooth_shax_epi
         )
     tck_endo = get_shax_from_coords(
-        coords_endo, resolution, slice_thickness, smooth_shax_endo
+        coords_endo, smooth_shax_endo
     )
     sample_points_epi = get_sample_points_from_shax(tck_epi, n_points_lax)
     sample_points_endo = get_sample_points_from_shax(tck_endo, n_points_lax)
@@ -1051,12 +1114,15 @@ def NodeGenerator(
         tck_lax_endo, apex_endo, num_z_sections_endo, z_sections_flag_endo
     )
     points_cloud_endo, k_apex_endo = create_point_cloud(
-        tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=8
+    tck_shax_endo, apex_endo, seed_num_base_endo, seed_num_threshold=25
     )
     points_cloud_epi, k_apex_epi = create_point_cloud(
-        tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=8
+        tck_shax_epi, apex_epi, seed_num_base_epi, seed_num_threshold=25
     )
-    return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo
+    # Calculate normals
+    normals_list_endo = calculate_normals(points_cloud_endo, k_apex_endo)
+    normals_list_epi = calculate_normals(points_cloud_epi, k_apex_epi)
+    return points_cloud_epi, points_cloud_endo, k_apex_epi, k_apex_endo, normals_list_epi, normals_list_endo
 
 
 def VentricMesh_delaunay(
@@ -1089,10 +1155,10 @@ def VentricMesh_delaunay(
     mesh_endo = create_mesh(vertices_endo, faces_endo)
     mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
     mesh_endo.save(mesh_endo_filename)
-    # mesh_base=create_mesh(vertices_base,faces_base)
-    # mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
-    # mesh_base.save(mesh_base_filename)
-    return mesh_merged
+    mesh_base=create_mesh(vertices_base,faces_base)
+    mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
+    mesh_base.save(mesh_base_filename)
+    return mesh_merged, mesh_epi, mesh_endo, mesh_base
 
 def VentricMesh_poisson(
     points_cloud_epi,
@@ -1100,16 +1166,36 @@ def VentricMesh_poisson(
     num_mid_layers_base,
     SurfaceMeshSizeEpi=1,
     SurfaceMeshSizeEndo=1,
-    MeshSizeMax=None, 
-    MeshSizeMin=None,
+    normals_list_epi = None,
+    normals_list_endo = None,
     save_flag=True,
     filename_suffix="",
     result_folder="",
 ):
-    stacked_points_epi = np.vstack(points_cloud_epi)
+    # Stack points and normals
     stacked_points_endo = np.vstack(points_cloud_endo)
-    vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(stacked_points_epi, mesh_size=SurfaceMeshSizeEpi, output_folder=result_folder, fname_suffix='epi')
-    vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(stacked_points_endo, mesh_size=SurfaceMeshSizeEndo, output_folder=result_folder, fname_suffix='endo')
+    stacked_normals_endo = np.vstack(normals_list_endo)
+    stacked_points_epi = np.vstack(points_cloud_epi)
+    stacked_normals_epi = np.vstack(normals_list_epi)
+    # Generate surface meshes
+    vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(
+        stacked_points_epi, stacked_normals_epi, mesh_size=SurfaceMeshSizeEpi,
+        output_folder=result_folder, fname_suffix='epi'
+    )
+    mesh_epi = create_mesh(vertices_epi, faces_epi)
+    if save_flag:
+        mesh_epi_filename = result_folder + "Mesh_epi_" + filename_suffix + ".stl"
+        mesh_epi.save(mesh_epi_filename)
+    
+    
+    vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(
+        stacked_points_endo, stacked_normals_endo, mesh_size=SurfaceMeshSizeEndo,
+        output_folder=result_folder, fname_suffix='endo'
+    )
+    mesh_endo = create_mesh(vertices_endo, faces_endo)
+    if save_flag:
+        mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
+        mesh_endo.save(mesh_endo_filename)
     
     base_endo = get_base_from_vertices(vertices_endo)
     base_epi = get_base_from_vertices(vertices_epi)
@@ -1117,6 +1203,11 @@ def VentricMesh_poisson(
     points_cloud_base[0] = base_epi
     points_cloud_base[-1] = base_endo
     vertices_base, faces_base = create_base_mesh(points_cloud_base)
+    mesh_base=create_mesh(vertices_base,faces_base)
+    if save_flag:
+        mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
+        mesh_base.save(mesh_base_filename)
+    
     mesh_merged = merge_meshes(
         vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo
     )
@@ -1126,18 +1217,9 @@ def VentricMesh_poisson(
         mesh_merged_filename = result_folder + "Mesh_" + filename_suffix + ".stl"
     if save_flag:
         mesh_merged.save(mesh_merged_filename)
-    mesh_epi = create_mesh(vertices_epi, faces_epi)
-    mesh_epi_filename = result_folder + "Mesh_epi_" + filename_suffix + ".stl"
-    mesh_epi.save(mesh_epi_filename)
-    mesh_endo = create_mesh(vertices_endo, faces_endo)
-    mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
-    mesh_endo.save(mesh_endo_filename)
-    mesh_base=create_mesh(vertices_base,faces_base)
-    mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
-    mesh_base.save(mesh_base_filename)
-    output_mesh_filename = result_folder+'Mesh_3D.msh'
-    generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, mesh_base_filename, output_mesh_filename, MeshSizeMax=MeshSizeMax, MeshSizeMin=MeshSizeMin)
-    return mesh_merged
+    file_path=result_folder + "/Mesh_report.txt"
+    print_surface_mesh_quality_report(mesh_merged, file_path=file_path)
+    return mesh_epi_filename, mesh_endo_filename, mesh_base_filename
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
 # ----------------------------------------------------------------
@@ -1164,7 +1246,7 @@ def triangle_aspect_ratio(vertices):
     return np.max(lengths) / shortest_altitude * np.sqrt(3) / 2
 
 
-def check_mesh_quality(mesh_data, file_path=None):
+def print_surface_mesh_quality_report(mesh_data, file_path=None):
     """
     Get a mesh file and print out its quality metrics.
     """
@@ -1172,7 +1254,7 @@ def check_mesh_quality(mesh_data, file_path=None):
         file = open(file_path, 'w')
     else:
         file = None
-    line = "======= Mesh Statistics ======="
+    line = "======= Surface Mesh Statistics ======="
     print(line)
     if file:
         file.write(line + '\n')
@@ -1201,7 +1283,7 @@ def check_mesh_quality(mesh_data, file_path=None):
     print(line)
     if file:
         file.write(line + '\n')
-    line = "==============================="
+    line = "======================================"
     print(line)
     print(line)
     if file:
@@ -1211,7 +1293,7 @@ def check_mesh_quality(mesh_data, file_path=None):
 
 
 # %%
-def print_mesh_quality_report(n_bins, file_path=None):
+def print_3D_mesh_quality_report(n_bins, file_path=None):
     # Retrieve statistics about the mesh
     # num_elem=gmsh.model.mesh.getMaxElementTag()
     elem_tags = gmsh.model.mesh.getElementsByType(
@@ -1222,7 +1304,7 @@ def print_mesh_quality_report(n_bins, file_path=None):
     counts, bin_edges = np.histogram(q, bins=n_bins, range=(0, 1))
     
     if file_path is not None:
-        file = open(file_path, 'a')
+        file = open(file_path, 'w')
     else:
         file = None
     
@@ -1235,7 +1317,10 @@ def print_mesh_quality_report(n_bins, file_path=None):
         print(line)
         if file:
             file.write(line + '\n')
-
+    line = "==============================="
+    print(line)
+    if file:
+        file.write(line + '\n')
     if file is not None:
         file.close()
         
@@ -1263,10 +1348,7 @@ def generate_3d_mesh_from_stl(stl_path, mesh_path, MeshSizeMin=None, MeshSizeMax
     gmsh.model.mesh.Recombine3DAll = 0
     gmsh.model.mesh.generate(3)
     gmsh.write(mesh_path)
-    print("===============================")
-    print_mesh_quality_report(10, file_path=stl_path[:-4]+'_report.txt')
-    print("===============================")
-    print("===============================")
+    print_3D_mesh_quality_report(10, file_path=stl_path[:-4]+'_report.txt')
     gmsh.finalize()
 
 
@@ -1309,9 +1391,7 @@ def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, me
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
     # Save the mesh to the specified file
-    print("===============================")
     gmsh.write(output_mesh_filename)
-    print_mesh_quality_report(10, file_path=output_mesh_filename[:-4]+'_report.txt')
-    print("===============================")
+    print_3D_mesh_quality_report(10, file_path=output_mesh_filename[:-4]+'_report.txt')
     # Finalize Gmsh
     gmsh.finalize()

@@ -29,6 +29,8 @@ dependencies = [
     "plotly",
     "structlog",
     "gmsh",
+    "trimesh",
+    "rtree",
     "open3d",
     "pathlib",
 ]

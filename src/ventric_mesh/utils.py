@@ -650,3 +650,236 @@ def plotly_3d_base_splines(tck_layers, fig=None):
         )
     fig.update_layout(scene_camera=dict(eye=dict(x=2, y=2, z=2)))
     return fig
+
+
+
+def plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi_filename, mesh_endo_filename, plot_edges=True, fig=None):
+    """
+    Plots the coords_epi, coords_endo, mesh_epi, and mesh_endo in Plotly with line colors.
+
+    Parameters:
+    - coords_epi: list of arrays, each array containing the coordinates from a slice.
+                  Each array is of shape (n_points, 3).
+    - coords_endo: list of arrays, similar to coords_epi.
+    - mesh_epi: mesh.Mesh object (from stl.mesh import Mesh)
+    - mesh_endo: mesh.Mesh object (from stl.mesh import Mesh)
+    """
+    from stl import mesh
+    
+    mesh_epi = mesh.Mesh.from_file(mesh_epi_filename)
+    mesh_endo = mesh.Mesh.from_file(mesh_endo_filename)
+    
+    # Check if figure is provided, else create a new one
+    if fig is None:
+        fig = go.Figure()
+    
+    # Plot coords_epi
+    for k, coords_k in enumerate(coords_epi):
+        if coords_k.shape[0] == 0:
+            continue
+        fig.add_trace(go.Scatter3d(
+            x=coords_k[:, 0],
+            y=coords_k[:, 1],
+            z=coords_k[:, 2],
+            mode='markers',
+            marker=dict(size=3, color='red'),
+            name=f'Coords Epi Slice {k}'
+        ))
+
+    # Plot coords_endo
+    for k, coords_k in enumerate(coords_endo):
+        if coords_k.shape[0] == 0:
+            continue
+        fig.add_trace(go.Scatter3d(
+            x=coords_k[:, 0],
+            y=coords_k[:, 1],
+            z=coords_k[:, 2],
+            mode='markers',
+            marker=dict(size=3, color='blue'),
+            name=f'Coords Endo Slice {k}'
+        ))
+
+    # Prepare mesh_epi for plotting
+    vectors_epi = mesh_epi.vectors  # Shape (n_facets, 3, 3)
+    vertices_epi = vectors_epi.reshape(-1, 3)
+    # Remove duplicate vertices
+    vertices_epi_unique, index_unique_epi = np.unique(vertices_epi, axis=0, return_inverse=True)
+    faces_epi = index_unique_epi.reshape(-1, 3)
+    
+    # Plot mesh_epi with faces
+    fig.add_trace(go.Mesh3d(
+        x=vertices_epi_unique[:, 0],
+        y=vertices_epi_unique[:, 1],
+        z=vertices_epi_unique[:, 2],
+        i=faces_epi[:, 0],
+        j=faces_epi[:, 1],
+        k=faces_epi[:, 2],
+        color='red',
+        opacity=0.5,
+        name='Mesh Epi',
+        flatshading=True
+    ))
+
+    # Plot mesh_epi edges
+    if plot_edges:
+        fig = add_mesh_edges_to_figure(fig, vertices_epi_unique, faces_epi, line_color='black', name='Mesh Epi Edges')
+
+    # Prepare mesh_endo for plotting
+    vectors_endo = mesh_endo.vectors  # Shape (n_facets, 3, 3)
+    vertices_endo = vectors_endo.reshape(-1, 3)
+    # Remove duplicate vertices
+    vertices_endo_unique, index_unique_endo = np.unique(vertices_endo, axis=0, return_inverse=True)
+    faces_endo = index_unique_endo.reshape(-1, 3)
+    
+    # Plot mesh_endo with faces
+    fig.add_trace(go.Mesh3d(
+        x=vertices_endo_unique[:, 0],
+        y=vertices_endo_unique[:, 1],
+        z=vertices_endo_unique[:, 2],
+        i=faces_endo[:, 0],
+        j=faces_endo[:, 1],
+        k=faces_endo[:, 2],
+        color='blue',
+        opacity=0.5,
+        name='Mesh Endo',
+        flatshading=True
+    ))
+
+    # Plot mesh_endo edges
+    if plot_edges:
+        fig = add_mesh_edges_to_figure(fig, vertices_endo_unique, faces_endo, line_color='black', name='Mesh Endo Edges')
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title='X',
+            yaxis_title='Y',
+            zaxis_title='Z'
+        ),
+        title='Coords and Mesh Visualization with Edge Lines'
+    )
+
+    return fig
+
+def add_mesh_edges_to_figure(fig, vertices, faces, line_color='black', name='Mesh Edges'):
+    """
+    Adds mesh edges as lines to the figure.
+
+    Parameters:
+    - fig: Plotly Figure object to add the edges to.
+    - vertices: Array of vertices, shape (n_vertices, 3).
+    - faces: Array of face indices, shape (n_faces, 3).
+    - line_color: Color of the lines.
+    - name: Name of the trace in the legend.
+    """
+    
+    # Create a set to store unique edges
+    edges = set()
+
+    # Iterate over faces and extract edges
+    for face in faces:
+        # For each face (triangle), get all edge pairs
+        edge_pairs = [(face[i], face[(i + 1) % 3]) for i in range(3)]
+        for edge in edge_pairs:
+            # Sort the vertices indices to avoid duplicates (e.g., (1,2) and (2,1))
+            sorted_edge = tuple(sorted(edge))
+            edges.add(sorted_edge)
+    
+    # Prepare lists to hold edge coordinates
+    x_edges = []
+    y_edges = []
+    z_edges = []
+
+    # Build the coordinates for the edges
+    for edge in edges:
+        x_coords = [vertices[edge[0], 0], vertices[edge[1], 0], None]
+        y_coords = [vertices[edge[0], 1], vertices[edge[1], 1], None]
+        z_coords = [vertices[edge[0], 2], vertices[edge[1], 2], None]
+        x_edges.extend(x_coords)
+        y_edges.extend(y_coords)
+        z_edges.extend(z_coords)
+
+    # Add the edges as a Scatter3d line trace
+    fig.add_trace(go.Scatter3d(
+        x=x_edges,
+        y=y_edges,
+        z=z_edges,
+        mode='lines',
+        line=dict(color=line_color, width=1),
+        name=name,
+        showlegend=False
+    ))
+
+    return fig
+
+
+
+def calculate_error_between_coords_and_mesh(coords, stl_mesh_filename):
+    import trimesh
+    from stl import mesh
+    
+    stl_mesh = mesh.Mesh.from_file(stl_mesh_filename)
+    # Extract vertices and faces
+    vectors = stl_mesh.vectors  # Shape (n_facets, 3, 3)
+    vertices = vectors.reshape(-1, 3)  # Flatten vertices
+    unique_vertices, indices = np.unique(vertices, axis=0, return_inverse=True)
+    faces = indices.reshape(-1, 3)
+
+    # Create a trimesh object
+    trimesh_mesh = trimesh.Trimesh(vertices=unique_vertices, faces=faces, process=False)
+
+    # Compute the signed distance from points to mesh
+    coords_array = np.vstack(coords)
+    distances = trimesh.proximity.signed_distance(trimesh_mesh, coords_array)
+
+    errors = np.abs(distances)
+    
+    return errors
+
+
+def plot_error_histogram(errors, fname, color, xlim, ylim, title_prefix, resolution=""):
+
+    avg_error = np.mean(errors)
+    std_error  = np.std(errors)
+    if not resolution == "":
+        resolution = np.round(resolution,3)
+        line = f'{title_prefix} Error Distribution (Avg: {avg_error:.2f} ± {std_error:.2f}) - (Data Res:{resolution}) '
+    else:
+        line = f'{title_prefix} Error Distribution (Avg: {avg_error:.2f} ± {std_error:.2f})'
+    # Plot error distribution histogram
+    plt.figure()
+    plt.hist(errors, bins=30, edgecolor='black', color=color)
+    plt.xlabel('Error')
+    plt.ylabel('Frequency')
+    plt.title(line)
+    plt.xlim(xlim)
+    plt.ylim(ylim)
+    plt.savefig(fname)
+    plt.close()
+
+def save_error_distribution_report(errors, file_path, n_bins=10, surface_name = "", resolution=""):
+    # Generate histogram data
+    counts, bin_edges = np.histogram(errors, bins=n_bins, range=(np.min(errors), np.max(errors)))
+    file = open(file_path, 'w')
+    line = "======= Mesh Statistics ======="
+    file.write(line + '\n')
+    if not surface_name == "":
+        line = f"{surface_name}"
+        if not resolution == "":
+            resolution = np.round(resolution,3)
+            line = f"{surface_name} with image resolution of {resolution}"
+        file.write(line + '\n')
+    line = f"Original coords vs surface mesh error distribution report:"
+    file.write(line + '\n')
+    line = "-------------------------------"
+    file.write(line + '\n')
+    total_errors = len(errors)
+    cumulative_percentage = 0
+    for i in range(n_bins):
+        bin_count = counts[i]
+        bin_percentage = (bin_count / total_errors) * 100
+        cumulative_percentage += bin_percentage
+        line = (f"{bin_edges[i]:.4f} ≤ error < {bin_edges[i+1]:.4f} : "
+                f"{bin_count:>10} instances ({bin_percentage:6.2f}%), "
+                f"cumulative: {cumulative_percentage:6.2f}%")
+        file.write(line + '\n')
+    file.close()
