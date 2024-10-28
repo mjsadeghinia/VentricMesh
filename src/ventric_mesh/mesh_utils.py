@@ -430,7 +430,7 @@ def create_apex_point_cloud(point_cloud, k, tck_shax, apex, seed_num_threshold):
     center = np.mean(last_slice_points, axis=0)
     center[2] = apex[2]  # Ensure the z-coordinate matches the apex
     check_apex_shift(apex, center)
-    center_normals = np.mean(point_cloud[int(K*0.9)], axis=0)
+    # center_normals = np.mean(point_cloud[int(K*0.9)], axis=0)
     # Determine the number of intermediate slices between the last slice and the apex
     num_slices = 2
     apex_seed_num = np.floor(np.linspace(num_points_last_slice, 4, num_slices))
@@ -458,7 +458,7 @@ def create_apex_point_cloud(point_cloud, k, tck_shax, apex, seed_num_threshold):
         tck_apex_shax_k = tck_apex_shax[n]
         points = equally_spaced_points_on_spline(tck_apex_shax_k, int(apex_seed_num_k))
         points[:, 2] = np.mean(points[:, 2])
-        normals = create_apex_normals(points, center_normals)
+        # normals = create_apex_normals(points, center_normals)
         points_apex.append(points)
         # normals_apex.append(normals)
     
@@ -561,25 +561,33 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
     
     return point_cloud, k_apex
 
-def calculate_normals(point_cloud, apex_threshold = 20):
+def calculate_normals(point_cloud, apex_ind):
     normals_list = []
-    # Compute the centroid of all the points
     num_layers = len(point_cloud)
-    apex_ind = int(num_layers * apex_threshold / 100)
-    all_points = np.vstack(point_cloud)
-    centroid_all = np.mean(all_points, axis=0)
+    
+    # Define the centroid of points in the (almost, offsetted by 90%) last slice before the apex
+    apex_centeroid_ind = int(0.9 * apex_ind)
+    apex_centeroid_points = np.vstack(point_cloud[apex_centeroid_ind])
+    apex_centeroid = np.mean(apex_centeroid_points, axis=0)
     
     for i, points in enumerate(point_cloud):
-        if i < num_layers - 10:
+        if i < apex_ind:
+            # Calculate centroid for layers below the apex
             centroid_layer = np.mean(points, axis=0)
             normals = points - centroid_layer
+        elif i < num_layers - 1:
+            # Use the centroid of the last slice for layers between apex and the top
+            normals = points - apex_centeroid
         else:
-            # Middle layers: normals = point - centroid of all points
-            normals = points - centroid_all
-        # Normalize the normals
-        norms = np.linalg.norm(normals, axis=1)
-        normals = normals / norms[:, np.newaxis]
+            # Assign upward normal vector to the top layer
+            normals_list.append(np.array([[0, 0, 1]] * len(points)))
+            break
+        
+        # Normalize normals
+        norms = np.linalg.norm(normals, axis=1, keepdims=True)
+        normals = normals / norms
         normals_list.append(normals)
+    
     return normals_list
 
 
