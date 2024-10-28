@@ -76,14 +76,14 @@ def plot_voxels(voxel_array, resolution, slice_thickness, alpha = 1):
 def test_meshing():
     image_size = 150
     num_slices = 10
-    ring_thickness = 20
+    ring_thickness = 15
     start_reduction = 100
-    max_shift = 1  # Maximum shift in pixels for the ring center
+    max_shift = 0  # Maximum shift in pixels for the ring center
     resolution = 1
-    slice_thickness = 10
+    slice_thickness = 5
 
     mask = create_lv(image_size, num_slices, ring_thickness, start_reduction, max_shift)
-    
+
     # ax=plot_voxels(mask, resolution, slice_thickness)
     # ax.view_init(elev=-150, azim=-45)
     # ax.set_box_aspect(aspect=(1, 1, 1))
