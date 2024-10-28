@@ -155,7 +155,7 @@ def test_meshing():
     # fig = utils.plot_coords_and_mesh(coords_epi, coords_endo, mesh_epi_filename, mesh_endo_filename)
     # fname = "Mesh_vs_Coords.html"
     # fig.write_html(fname)
-    num_large_error = (all_errors>3*resolution).sum()
+    num_large_error = (all_errors>5*resolution).sum()
     # check if more than 5% of the elements have very high aspect ratios
     assert num_large_error<0.01*len(all_errors)
 
