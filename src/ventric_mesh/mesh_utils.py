@@ -533,7 +533,7 @@ def third_order_interpolate(start_point, end_point, num_point):
     z_sections = polynomial(x_values)
     return z_sections
 
-def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
+def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8, update_seed_num_flag = True):
     point_cloud = []
     k_apex = 0
     K = len(tck_shax)
@@ -551,7 +551,10 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
             point_cloud.extend(points_apex)
             break
         else:
-            points = equally_spaced_points_on_spline(tck_k, seed_num_k)
+            if update_seed_num_flag:
+                points = equally_spaced_points_on_spline(tck_k, seed_num_k)
+            else:
+                points = equally_spaced_points_on_spline(tck_k, seed_num_base)
             # Ensuring that base is always at z=0
             if k == 0:
                 points[:, 2] = 0
