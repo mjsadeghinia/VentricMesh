@@ -239,14 +239,14 @@ def create_z_sections_for_shax(tck_lax, apex, num_sections):
     return z_sections
 
 
-def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0):
+def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0, z_base=0):
     T_total = len(tck_lax[0])
     tck_shax = []
     if z_sections_flag == 1:
         z_sections = create_z_sections_for_shax(tck_lax, apex, num_sections)
     elif z_sections_flag == 0:
-        z_sections = np.linspace(0, apex[2], num_sections)
-    for z in z_sections:
+        z_sections = np.linspace(z_base, apex[2], num_sections+1)
+    for z in z_sections[:-1]:
         shax_points = get_shax_points_from_lax(tck_lax, z)
         tck_shax_k, u = splprep(
             [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
