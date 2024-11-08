@@ -132,7 +132,7 @@ def get_apex_coords(points, K, threshold, slice_thickness):
     return np.hstack((apex_xy, apex_z))
 
 
-def create_lax_points(sample_points, apex_threshold, slice_thickness):
+def create_lax_points(sample_points, apex_threshold, slice_thickness, apex_coord = None):
     """
     The samples points need to be sorted to create LAX points. For n_points in samples we have n_curves=n_points/2.
     This means that for each time step we have n_curves each has 2*K+1 which K is the number of SHAX slices and the 1 corresponds to apex.
@@ -147,6 +147,11 @@ def create_lax_points(sample_points, apex_threshold, slice_thickness):
     apex = get_apex_coords(
         Last_SHAX_points, K, apex_threshold, slice_thickness
     )
+    if apex_coord is not None:
+        # dist = np.linalg.norm(apex[:2]-apex_coord[:2])
+        # logger.warning(f"The apex moved {np.round(dist,2)} in short axis plane")
+        # apex[2] = apex_coord[2]
+        apex = apex_coord
     # We find the points for each curves of LAX
     for m in tqdm(range(n_curves), desc="Creating LAX Curves", ncols=100):
         points_1 = []
