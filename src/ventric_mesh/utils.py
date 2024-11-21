@@ -629,7 +629,7 @@ def plot_3d_points_on_figure(data_array, fig=None):
 
 
 
-def plotly_3d_base_splines(tck_layers, fig=None):
+def plotly_3d_base_splines(tck_layers, fig=None, color = "black"):
     
     # Check if figure is provided, else create a new one
     if fig is None:
@@ -645,7 +645,7 @@ def plotly_3d_base_splines(tck_layers, fig=None):
                 z=points[2],
                 showlegend=False,
                 mode="lines",
-                line=dict(color="black"),
+                line=dict(color=color),
             )
         )
     fig.update_layout(scene_camera=dict(eye=dict(x=2, y=2, z=2)))
