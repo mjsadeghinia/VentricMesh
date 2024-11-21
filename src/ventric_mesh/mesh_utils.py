@@ -132,7 +132,7 @@ def get_apex_coords(points, K, threshold, slice_thickness):
     return np.hstack((apex_xy, apex_z))
 
 
-def create_lax_points(sample_points, apex_threshold, slice_thickness):
+def create_lax_points(sample_points, apex_threshold, slice_thickness, apex_coord = None):
     """
     The samples points need to be sorted to create LAX points. For n_points in samples we have n_curves=n_points/2.
     This means that for each time step we have n_curves each has 2*K+1 which K is the number of SHAX slices and the 1 corresponds to apex.
@@ -147,6 +147,11 @@ def create_lax_points(sample_points, apex_threshold, slice_thickness):
     apex = get_apex_coords(
         Last_SHAX_points, K, apex_threshold, slice_thickness
     )
+    if apex_coord is not None:
+        # dist = np.linalg.norm(apex[:2]-apex_coord[:2])
+        # logger.warning(f"The apex moved {np.round(dist,2)} in short axis plane")
+        # apex[2] = apex_coord[2]
+        apex = apex_coord
     # We find the points for each curves of LAX
     for m in tqdm(range(n_curves), desc="Creating LAX Curves", ncols=100):
         points_1 = []
@@ -234,14 +239,14 @@ def create_z_sections_for_shax(tck_lax, apex, num_sections):
     return z_sections
 
 
-def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0):
+def get_shax_from_lax(tck_lax, apex, num_sections, z_sections_flag=0, z_base=0):
     T_total = len(tck_lax[0])
     tck_shax = []
     if z_sections_flag == 1:
         z_sections = create_z_sections_for_shax(tck_lax, apex, num_sections)
     elif z_sections_flag == 0:
-        z_sections = np.linspace(0, apex[2], num_sections)
-    for z in z_sections:
+        z_sections = np.linspace(z_base, apex[2], num_sections+1)
+    for z in z_sections[:-1]:
         shax_points = get_shax_points_from_lax(tck_lax, z)
         tck_shax_k, u = splprep(
             [shax_points[:, 0], shax_points[:, 1], shax_points[:, 2]],
@@ -533,7 +538,7 @@ def third_order_interpolate(start_point, end_point, num_point):
     z_sections = polynomial(x_values)
     return z_sections
 
-def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
+def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8, update_seed_num_flag = True):
     point_cloud = []
     k_apex = 0
     K = len(tck_shax)
@@ -551,7 +556,10 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8):
             point_cloud.extend(points_apex)
             break
         else:
-            points = equally_spaced_points_on_spline(tck_k, seed_num_k)
+            if update_seed_num_flag:
+                points = equally_spaced_points_on_spline(tck_k, seed_num_k)
+            else:
+                points = equally_spaced_points_on_spline(tck_k, seed_num_base)
             # Ensuring that base is always at z=0
             if k == 0:
                 points[:, 2] = 0
