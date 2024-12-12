@@ -588,7 +588,10 @@ def calculate_normals(point_cloud, apex_ind):
             normals = points - apex_centeroid
         else:
             # Assign upward normal vector to the top layer
-            normals_list.append(np.array([[0, 0, 1]] * len(points)))
+            if len(points.shape) == 1:
+                normals_list.append(np.array([[0, 0, 1]]))
+            else:
+                normals_list.append(np.array([[0, 0, 1]] * len(points)))
             break
         
         # Normalize normals
