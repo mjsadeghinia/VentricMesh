@@ -272,7 +272,11 @@ def calculate_area_points(points):
     if points.ndim == 1:
         return 0
     else:
-        tck_tk, u_epi = splprep([points[:, 0], points[:, 1]], s=0, per=True, k=3)
+        if not np.allclose(points[0], points[-1]):
+            points = np.vstack([points, points[0]])
+        # Remove consecutive duplicates
+        unique_points = points[np.diff(points, axis=0, prepend=np.nan).any(axis=1)]
+        tck_tk, u_epi = splprep([unique_points[:, 0], unique_points[:, 1]], s=0, per=True, k=3)
         area = calculate_area_b_spline(tck_tk)
         return area
 
