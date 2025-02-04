@@ -569,7 +569,10 @@ def create_point_cloud(tck_shax, apex, seed_num_base=30, seed_num_threshold=8, u
     
     return point_cloud, k_apex
 
-def calculate_normals(point_cloud, apex_ind):
+def calculate_normals(point_cloud, apex_ind, base_ind=0):
+    # the normal is defined as the point to the center of the curve
+    # for apex (layer > apex_ind) is the vector pointing to the first slice of apex
+    # for base if specified, is the vector potinin towards the last slice of the base
     normals_list = []
     num_layers = len(point_cloud)
     
@@ -578,14 +581,18 @@ def calculate_normals(point_cloud, apex_ind):
     apex_centeroid_points = np.vstack(point_cloud[apex_centeroid_ind])
     apex_centeroid = np.mean(apex_centeroid_points, axis=0)
     
+    base_centeroid = np.mean(point_cloud[base_ind], axis=0)
+    
     for i, points in enumerate(point_cloud):
-        if i < apex_ind:
+        if i < base_ind:
+            normals = base_centeroid - points
+        elif i < apex_ind:
             # Calculate centroid for layers below the apex
             centroid_layer = np.mean(points, axis=0)
-            normals = points - centroid_layer
+            normals = centroid_layer - points
         elif i < num_layers - 1:
             # Use the centroid of the last slice for layers between apex and the top
-            normals = points - apex_centeroid
+            normals = apex_centeroid - points
         else:
             # Assign upward normal vector to the top layer
             normals_list.append(np.array([[0, 0, 1]] * len(points)))
