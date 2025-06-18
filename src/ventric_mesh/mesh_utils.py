@@ -613,7 +613,7 @@ def calculate_normals(point_cloud, apex_ind, base_ind=0):
 # --------- Creating Mesh from Points Cloud (epi and endo)--------
 # ----------------------------------------------------------------
 def align_points(points):
-    target_center = points[-1][:2]
+    target_center = points[-1][0][:2]
     for i in range(len(points) - 1):
         array = points[i]
         current_center = np.mean(array[:, :2], axis=0)
