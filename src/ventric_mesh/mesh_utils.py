@@ -830,11 +830,49 @@ def create_base_point_cloud_poisson(base_endo, base_epi, num_mid_layers=1):
         base_points_cloud.append(points)
     return base_points_cloud
 
+def filter_triangles_by_outer_loop(vertices, faces, outer_polygon):
+    # Create a 2D path from the outer loop points
+    outer_path = Path(outer_polygon[:, :2])
+    # Compute centroids for each triangle face (using only the x,y coordinates)
+    centroids = np.mean(vertices[faces, :2], axis=1)
+    # Check which centroids are inside the outer loop
+    inside = outer_path.contains_points(centroids)
+    if not all(inside):
+        logger.warning('Some faces of the base mesh is removed, as they are outside the epi ring')
+    # Return only the faces whose centroids are inside
+    return faces[inside]
+
+def filter_degenerate_faces(vertices, faces, tol=1e-8):
+    """
+    Remove faces where the vertices are nearly collinear (degenerate triangles)
+    by computing the triangle area and discarding any with area below tol.
+    """
+    valid_faces = []
+    for face in faces:
+        # Extract the triangle's vertices (using only x and y)
+        pts = vertices[face, :2]
+        # Calculate the area of the triangle using the determinant method.
+        # The area is given by:
+        # 0.5 * |x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)|
+        area = 0.5 * np.abs(
+            pts[0, 0]*(pts[1, 1]-pts[2, 1]) +
+            pts[1, 0]*(pts[2, 1]-pts[0, 1]) +
+            pts[2, 0]*(pts[0, 1]-pts[1, 1])
+        )
+        # Keep only faces with area above the tolerance.
+        if area > tol:
+            valid_faces.append(face)
+        else:
+            logger.warning('Some faces of the base mesh is removed, as the vertices are lying on a line')
+    return np.array(valid_faces)
+
 def create_base_mesh(base_points):
     vertices = np.vstack(base_points)
     tri = Delaunay(vertices[:, :2])
     threshold = vertices.shape[0] - base_points[-1].shape[0]
     faces = filter_simplices(tri.simplices, threshold)
+    faces = filter_triangles_by_outer_loop(vertices, faces, base_points[0])
+    faces = filter_degenerate_faces(vertices, faces)
     return vertices, faces
 
 
