@@ -946,7 +946,7 @@ def preprocess_point_cloud(pcd, k=10, estimate_normals=False):
     return pcd
 
 
-def create_surface_mesh(pcd):
+def create_surface_mesh(pcd, cleanup=False):
     """
     Create a surface mesh from the point cloud using Poisson reconstruction.
     """
@@ -960,6 +960,30 @@ def create_surface_mesh(pcd):
     mesh.remove_degenerate_triangles()
     mesh.remove_duplicated_triangles()
     mesh.remove_duplicated_vertices()
+
+    tris  = np.asarray(mesh.triangles)
+    dens  = np.asarray(densities)
+
+    if cleanup:
+        density_threshold = np.quantile(dens, 0.25)
+        bad_verts = dens < density_threshold
+        tri_mask = np.all(bad_verts[tris], axis=1)
+        mesh.remove_triangles_by_mask(tri_mask)
+        mesh.remove_unreferenced_vertices()
+        verts = np.asarray(mesh.vertices)
+        tris  = np.asarray(mesh.triangles)
+        # build edge occurrence map
+        edge_count = {}
+        for tri in tris:
+            for i, j in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
+                e = tuple(sorted((i, j)))
+                edge_count[e] = edge_count.get(e, 0) + 1
+        # collect boundary vertex indices (edges seen only once)
+        boundary_vids = {vid for edge, cnt in edge_count.items() if cnt == 1 for vid in edge}
+        # zero their Z coordinate
+        verts[list(boundary_vids), 2] = 0.0
+        # write back to mesh
+        mesh.vertices = o3d.utility.Vector3dVector(verts)
 
     return mesh
         
