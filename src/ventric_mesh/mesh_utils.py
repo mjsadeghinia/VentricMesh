@@ -946,7 +946,7 @@ def preprocess_point_cloud(pcd, k=10, estimate_normals=False):
     return pcd
 
 
-def create_surface_mesh(pcd, cleanup=False):
+def create_surface_mesh(pcd, cleanup=False, vertices_cut_off=0):
     """
     Create a surface mesh from the point cloud using Poisson reconstruction.
     """
@@ -965,9 +965,9 @@ def create_surface_mesh(pcd, cleanup=False):
     dens  = np.asarray(densities)
 
     if cleanup:
-        density_threshold = np.quantile(dens, 0.25)
-        bad_verts = dens < density_threshold
-        tri_mask = np.all(bad_verts[tris], axis=1)
+        verts = np.asarray(mesh.vertices)
+        tris  = np.asarray(mesh.triangles)
+        tri_mask = np.any(verts[tris][:, :, 2] > vertices_cut_off, axis=1)
         mesh.remove_triangles_by_mask(tri_mask)
         mesh.remove_unreferenced_vertices()
         verts = np.asarray(mesh.vertices)
@@ -1092,7 +1092,7 @@ def remesh_surface(stl_fname, mesh_size=1):
         gmsh.finalize()
         
         
-def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, output_folder="output", fname_suffix=''):
+def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, output_folder="output", fname_suffix='', poisson_cleanup=False):
     logger.info(f'{fname_suffix} points cloud are being preprocessed ...')
     pcd = make_open3d_point_cloud(points_cloud, normals)
     # Preprocess the point cloud without estimating normals
@@ -1103,7 +1103,7 @@ def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, o
     pcd = preprocess_point_cloud(pcd, estimate_normals=estimate_normals)
     logger.info(f'{fname_suffix} points cloud normals are set from spline derivatives')
     # Create surface mesh from point cloud
-    mesh = create_surface_mesh(pcd)
+    mesh = create_surface_mesh(pcd, cleanup=poisson_cleanup)
     logger.info(f'{fname_suffix} initial surface is reconstructed based on Poisson surface reconstruction')
     # Compute normals for the mesh (required for STL export)
     mesh.compute_vertex_normals()
@@ -1249,6 +1249,8 @@ def VentricMesh_poisson(
     normals_list_epi = None,
     normals_list_endo = None,
     save_flag=True,
+    poisson_cleanup_epi=False,
+    poisson_cleanup_endo=False,
     filename_suffix="",
     result_folder="",
 ):
@@ -1260,7 +1262,7 @@ def VentricMesh_poisson(
     # Generate surface meshes
     vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(
         stacked_points_epi, stacked_normals_epi, mesh_size=SurfaceMeshSizeEpi,
-        output_folder=result_folder, fname_suffix='epi'
+        output_folder=result_folder, fname_suffix='epi', poisson_cleanup=poisson_cleanup_epi
     )
     mesh_epi = create_mesh(vertices_epi, faces_epi)
     if save_flag:
@@ -1270,7 +1272,7 @@ def VentricMesh_poisson(
     
     vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(
         stacked_points_endo, stacked_normals_endo, mesh_size=SurfaceMeshSizeEndo,
-        output_folder=result_folder, fname_suffix='endo'
+        output_folder=result_folder, fname_suffix='endo', poisson_cleanup=poisson_cleanup_endo
     )
     mesh_endo = create_mesh(vertices_endo, faces_endo)
     if save_flag:
