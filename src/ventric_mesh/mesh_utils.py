@@ -1291,17 +1291,6 @@ def VentricMesh_poisson(
         mesh_base_filename=result_folder + f'Mesh_base{save_name_suffix}.stl'
         mesh_base.save(mesh_base_filename)
     
-    mesh_merged = merge_meshes(
-        vertices_epi, faces_epi, vertices_base, faces_base, vertices_endo, faces_endo
-    )
-    if filename_suffix == "":
-        mesh_merged_filename = result_folder + "Mesh.stl"
-    else:
-        mesh_merged_filename = result_folder + "Mesh_" + filename_suffix + ".stl"
-    if save_flag:
-        mesh_merged.save(mesh_merged_filename)
-    file_path=result_folder + "/Mesh_report.txt"
-    print_surface_mesh_quality_report(mesh_merged, file_path=file_path)
     return mesh_epi_filename, mesh_endo_filename, mesh_base_filename
 # ----------------------------------------------------------------
 # ------------------- Mesh Quality functions  --------------------
