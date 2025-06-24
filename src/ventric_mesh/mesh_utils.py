@@ -946,7 +946,7 @@ def preprocess_point_cloud(pcd, k=10, estimate_normals=False):
     return pcd
 
 
-def create_surface_mesh(pcd, cleanup=False, vertices_cut_off=0):
+def create_surface_mesh(pcd, cleanup=False, vertices_cut_off=None):
     """
     Create a surface mesh from the point cloud using Poisson reconstruction.
     """
@@ -967,6 +967,10 @@ def create_surface_mesh(pcd, cleanup=False, vertices_cut_off=0):
     if cleanup:
         verts = np.asarray(mesh.vertices)
         tris  = np.asarray(mesh.triangles)
+        if vertices_cut_off is None:
+            pcd_points = np.asarray(pcd.points)
+            z_pcd_points = np.unique(pcd_points[:,2])
+            vertices_cut_off = (z_pcd_points[0] - z_pcd_points[1]) * 0.5 
         tri_mask = np.any(verts[tris][:, :, 2] > vertices_cut_off, axis=1)
         mesh.remove_triangles_by_mask(tri_mask)
         mesh.remove_unreferenced_vertices()
@@ -984,6 +988,11 @@ def create_surface_mesh(pcd, cleanup=False, vertices_cut_off=0):
         verts[list(boundary_vids), 2] = 0.0
         # write back to mesh
         mesh.vertices = o3d.utility.Vector3dVector(verts)
+        mesh.remove_unreferenced_vertices()
+        mesh.remove_non_manifold_edges()
+        mesh.remove_degenerate_triangles()
+        mesh.remove_duplicated_triangles()
+        mesh.remove_duplicated_vertices()
 
     return mesh
         
@@ -1041,7 +1050,7 @@ def remesh_surface(stl_fname, mesh_size=1):
     try:
         gmsh.merge(stl_fname)
         # Classify surfaces to create geometry
-        angle = 60 # Angle threshold for feature detection in degrees
+        angle = 50 # Angle threshold for feature detection in degrees
         force_parametrizable_patches = True
         include_boundary = True
         curve_angle = 180  # For sewing surfaces
@@ -1254,7 +1263,7 @@ def VentricMesh_poisson(
     filename_suffix="",
     result_folder="",
 ):
-    save_name_suffix = f"_{filename_suffix}" if filename_suffix is not "" else ""
+    save_name_suffix = f"_{filename_suffix}" if filename_suffix != "" else ""
     # Stack points and normals
     stacked_points_endo = np.vstack(points_cloud_endo)
     stacked_normals_endo = np.vstack(normals_list_endo)
