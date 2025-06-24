@@ -974,25 +974,6 @@ def create_surface_mesh(pcd, cleanup=False, vertices_cut_off=None):
         tri_mask = np.any(verts[tris][:, :, 2] > vertices_cut_off, axis=1)
         mesh.remove_triangles_by_mask(tri_mask)
         mesh.remove_unreferenced_vertices()
-        verts = np.asarray(mesh.vertices)
-        tris  = np.asarray(mesh.triangles)
-        # build edge occurrence map
-        edge_count = {}
-        for tri in tris:
-            for i, j in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
-                e = tuple(sorted((i, j)))
-                edge_count[e] = edge_count.get(e, 0) + 1
-        # collect boundary vertex indices (edges seen only once)
-        boundary_vids = {vid for edge, cnt in edge_count.items() if cnt == 1 for vid in edge}
-        # zero their Z coordinate
-        verts[list(boundary_vids), 2] = 0.0
-        # write back to mesh
-        mesh.vertices = o3d.utility.Vector3dVector(verts)
-        mesh.remove_unreferenced_vertices()
-        mesh.remove_non_manifold_edges()
-        mesh.remove_degenerate_triangles()
-        mesh.remove_duplicated_triangles()
-        mesh.remove_duplicated_vertices()
 
     return mesh
         
@@ -1100,7 +1081,38 @@ def remesh_surface(stl_fname, mesh_size=1):
         # Finalize Gmsh
         gmsh.finalize()
         
-        
+def flatten_mesh_boundary(stl_fname, z_value=0.0):
+    gmsh.initialize()
+    gmsh.merge(stl_fname)
+    # Extract nodes and elements
+    node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
+    vertices = np.array(node_coords).reshape(-1, 3)
+    # Create a mapping from node tags to indices
+    node_index = {tag: idx for idx, tag in enumerate(node_tags)}
+
+    elementType = 2  # 3-node triangle
+    _, element_node_tags = gmsh.model.mesh.getElementsByType(elementType)
+    element_node_tags = np.array(element_node_tags).reshape(-1, 3)
+
+    # Map node tags to indices to create faces array
+    faces = np.array([[node_index[tag] for tag in tri] for tri in element_node_tags])
+    edge_count = {}
+    for f in faces:
+        for i, j in ((f[0], f[1]), (f[1], f[2]), (f[2], f[0])):
+            e = tuple(sorted((i, j)))
+            edge_count[e] = edge_count.get(e, 0) + 1
+    # collect boundary vertex indices (edges seen only once)
+    boundary_vids = {vid for edge, cnt in edge_count.items() if cnt == 1 for vid in edge}
+    vertices[list(boundary_vids),2] = z_value
+    # Write back to mesh
+    new_mesh = mesh.Mesh(np.zeros(len(faces), dtype=mesh.Mesh.dtype))
+    for i, f in enumerate(faces):
+        new_mesh.vectors[i] = vertices[f]
+    new_mesh.save(stl_fname)
+    gmsh.finalize()
+    return vertices, faces
+
+
 def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, output_folder="output", fname_suffix='', poisson_cleanup=False):
     logger.info(f'{fname_suffix} points cloud are being preprocessed ...')
     pcd = make_open3d_point_cloud(points_cloud, normals)
@@ -1123,6 +1135,8 @@ def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, o
     logger.info(f'{fname_suffix} mesh is being optimized')
     vertices, faces = remesh_surface(stl_fname, mesh_size=mesh_size)
     logger.info(f'{fname_suffix} is remeshed based on user mesh_size = {mesh_size}')
+    if poisson_cleanup:
+        vertices, faces = flatten_mesh_boundary(stl_fname, z_value=0.0)
     return vertices, faces
 
 def sort_vertices_by_proximity(vertices):
