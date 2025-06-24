@@ -1083,6 +1083,8 @@ def remesh_surface(stl_fname, mesh_size=1):
         
 def flatten_mesh_boundary(stl_fname, z_value=0.0):
     gmsh.initialize()
+    gmsh.option.setNumber("General.Terminal", 0)  # Enable terminal output
+    
     gmsh.merge(stl_fname)
     # Extract nodes and elements
     node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
