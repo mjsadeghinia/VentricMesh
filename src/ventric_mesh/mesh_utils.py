@@ -1254,6 +1254,7 @@ def VentricMesh_poisson(
     filename_suffix="",
     result_folder="",
 ):
+    save_name_suffix = f"_{filename_suffix}" if filename_suffix is not "" else ""
     # Stack points and normals
     stacked_points_endo = np.vstack(points_cloud_endo)
     stacked_normals_endo = np.vstack(normals_list_endo)
@@ -1266,7 +1267,7 @@ def VentricMesh_poisson(
     )
     mesh_epi = create_mesh(vertices_epi, faces_epi)
     if save_flag:
-        mesh_epi_filename = result_folder + "Mesh_epi_" + filename_suffix + ".stl"
+        mesh_epi_filename = result_folder + f"Mesh_epi{save_name_suffix}.stl"
         mesh_epi.save(mesh_epi_filename)
     
     
@@ -1276,7 +1277,7 @@ def VentricMesh_poisson(
     )
     mesh_endo = create_mesh(vertices_endo, faces_endo)
     if save_flag:
-        mesh_endo_filename = result_folder + "Mesh_endo_" + filename_suffix + ".stl"
+        mesh_endo_filename = result_folder + f"Mesh_endo{save_name_suffix}.stl"
         mesh_endo.save(mesh_endo_filename)
     
     base_endo = get_base_from_vertices(vertices_endo)
@@ -1287,7 +1288,7 @@ def VentricMesh_poisson(
     vertices_base, faces_base = create_base_mesh(points_cloud_base)
     mesh_base=create_mesh(vertices_base,faces_base)
     if save_flag:
-        mesh_base_filename=result_folder+'Mesh_base_'+filename_suffix+'.stl'
+        mesh_base_filename=result_folder + f'Mesh_base{save_name_suffix}.stl'
         mesh_base.save(mesh_base_filename)
     
     mesh_merged = merge_meshes(
