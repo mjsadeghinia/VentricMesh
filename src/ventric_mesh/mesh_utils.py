@@ -980,7 +980,8 @@ def create_surface_mesh(pcd, cleanup=False, vertices_cut_off=None):
 def optimize_stl_mesh(stl_fname):
     gmsh.initialize()
     # Optionally output messages to the terminal
-    gmsh.option.setNumber("General.Terminal", 0)
+    gmsh.option.setNumber("General.Terminal", 1)
+    gmsh.option.setNumber("General.Verbosity", 2)
     gmsh.model.add("SurfaceMesh")
     # Check if the file exists
     if not os.path.isfile(stl_fname):
@@ -1026,7 +1027,8 @@ def remesh_surface(stl_fname, mesh_size=1):
 
     # Initialize Gmsh
     gmsh.initialize()
-    gmsh.option.setNumber("General.Terminal", 0)  # Enable terminal output
+    gmsh.option.setNumber("General.Terminal", 1)
+    gmsh.option.setNumber("General.Verbosity", 2)
 
     try:
         gmsh.merge(stl_fname)
@@ -1083,7 +1085,8 @@ def remesh_surface(stl_fname, mesh_size=1):
         
 def flatten_mesh_boundary(stl_fname, z_value=0.0):
     gmsh.initialize()
-    gmsh.option.setNumber("General.Terminal", 0)  # Enable terminal output
+    gmsh.option.setNumber("General.Terminal", 1)
+    gmsh.option.setNumber("General.Verbosity", 2)
     
     gmsh.merge(stl_fname)
     # Extract nodes and elements
@@ -1423,7 +1426,8 @@ def print_3D_mesh_quality_report(n_bins, file_path=None):
         
 def generate_3d_mesh_from_stl(stl_path, mesh_path, MeshSizeMin=None, MeshSizeMax=None):
     gmsh.initialize()
-    gmsh.option.setNumber("General.Verbosity", 1)
+    gmsh.option.setNumber("General.Terminal", 1)
+    gmsh.option.setNumber("General.Verbosity", 2)
     gmsh.merge(stl_path)
     # Meshing options
     # # Set maximum element size
@@ -1453,7 +1457,8 @@ def generate_3d_mesh_from_seperate_stl(mesh_epi_filename, mesh_endo_filename, me
     # Initialize Gmsh
     gmsh.initialize()
     gmsh.model.add("3D Mesh")
-    gmsh.option.setNumber("General.Verbosity", 0)
+    gmsh.option.setNumber("General.Terminal", 1)
+    gmsh.option.setNumber("General.Verbosity", 2)
 
     # Merge the STL files
     gmsh.merge(mesh_epi_filename)
