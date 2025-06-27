@@ -1083,7 +1083,7 @@ def remesh_surface(stl_fname, mesh_size=1):
         # Finalize Gmsh
         gmsh.finalize()
         
-def flatten_mesh_boundary(stl_fname, z_value=0.0):
+def flatten_mesh_boundary(stl_fname, z_value_cleanup):
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 1)
     gmsh.option.setNumber("General.Verbosity", 2)
@@ -1108,7 +1108,7 @@ def flatten_mesh_boundary(stl_fname, z_value=0.0):
             edge_count[e] = edge_count.get(e, 0) + 1
     # collect boundary vertex indices (edges seen only once)
     boundary_vids = {vid for edge, cnt in edge_count.items() if cnt == 1 for vid in edge}
-    vertices[list(boundary_vids),2] = z_value
+    vertices[list(boundary_vids),2] = z_value_cleanup
     # Write back to mesh
     new_mesh = mesh.Mesh(np.zeros(len(faces), dtype=mesh.Mesh.dtype))
     for i, f in enumerate(faces):
@@ -1118,7 +1118,7 @@ def flatten_mesh_boundary(stl_fname, z_value=0.0):
     return vertices, faces
 
 
-def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, output_folder="output", fname_suffix='', poisson_cleanup=False):
+def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, output_folder="output", fname_suffix='', poisson_cleanup=False, z_value_cleanup=None):
     logger.info(f'{fname_suffix} points cloud are being preprocessed ...')
     pcd = make_open3d_point_cloud(points_cloud, normals)
     # Preprocess the point cloud without estimating normals
@@ -1141,7 +1141,8 @@ def generate_surface_mesh_from_pointclouds(points_cloud, normals, mesh_size=1, o
     vertices, faces = remesh_surface(stl_fname, mesh_size=mesh_size)
     logger.info(f'{fname_suffix} is remeshed based on user mesh_size = {mesh_size}')
     if poisson_cleanup:
-        vertices, faces = flatten_mesh_boundary(stl_fname, z_value=0.0)
+        z_value_cleanup = np.sort(np.unique(points_cloud[:,2]))[-1] if z_value_cleanup is None else z_value_cleanup
+        vertices, faces = flatten_mesh_boundary(stl_fname, z_value_cleanup)
     return vertices, faces
 
 def sort_vertices_by_proximity(vertices):
@@ -1276,6 +1277,8 @@ def VentricMesh_poisson(
     SurfaceMeshSizeEndo=1,
     normals_list_epi = None,
     normals_list_endo = None,
+    z_value_cleanup_epi=None,
+    z_value_cleanup_endo=None,
     save_flag=True,
     poisson_cleanup_epi=False,
     poisson_cleanup_endo=False,
@@ -1291,7 +1294,7 @@ def VentricMesh_poisson(
     # Generate surface meshes
     vertices_epi, faces_epi = generate_surface_mesh_from_pointclouds(
         stacked_points_epi, stacked_normals_epi, mesh_size=SurfaceMeshSizeEpi,
-        output_folder=result_folder, fname_suffix='epi', poisson_cleanup=poisson_cleanup_epi
+        output_folder=result_folder, fname_suffix='epi', poisson_cleanup=poisson_cleanup_epi, z_value_cleanup=z_value_cleanup_epi
     )
     mesh_epi = create_mesh(vertices_epi, faces_epi)
     if save_flag:
@@ -1301,7 +1304,7 @@ def VentricMesh_poisson(
     
     vertices_endo, faces_endo = generate_surface_mesh_from_pointclouds(
         stacked_points_endo, stacked_normals_endo, mesh_size=SurfaceMeshSizeEndo,
-        output_folder=result_folder, fname_suffix='endo', poisson_cleanup=poisson_cleanup_endo
+        output_folder=result_folder, fname_suffix='endo', poisson_cleanup=poisson_cleanup_endo, z_value_cleanup=z_value_cleanup_endo
     )
     mesh_endo = create_mesh(vertices_endo, faces_endo)
     if save_flag:
